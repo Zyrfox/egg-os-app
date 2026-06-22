@@ -368,4 +368,54 @@ function scoped(ctx: Ctx) {
 
 ---
 
+## 11. CONFLICT RESOLUTIONS (Locked)
+
+Keputusan-keputusan ini menggantikan task plan atau module spec yang bertentangan.
+Perubahan di seksi ini membutuhkan persetujuan tertulis eksplisit.
+
+### 11.1 User status enum (canonical)
+
+`invited | active | suspended | archived`
+
+`pending` adalah **BANNED**. Dipakai di draft task plan lama; AUTH lifecycle
+(`invited → set-password → active`) adalah canonical. Task plan 01b sudah dikoreksi.
+
+### 11.2 Permission code format (canonical)
+
+- **Role code:** `UPPERCASE_SNAKE` (contoh: `SUPER_ADMIN`, `ERP_OWNER`)
+- **Permission code:** lowercase, dot-separated, **tepat 2 level**: `{module}.{action}`
+  - Jika action menyebut entity, collapse dengan underscore: `core.company_read`
+  - **Tidak boleh 3 level** (`CORE.company.read` → invalid)
+  - Contoh valid: `auth.login`, `user.read`, `rbac.role_assign`, `core.company_read`,
+    `mdm.item_read`, `inv.stock_read`, `odr.report_read`
+
+### 11.3 scope_type enum (canonical, 8 nilai)
+
+`global | company | brand | outlet | department | own | assigned | audit_view`
+
+Task plan 01d tidak punya `global` dan `audit_view`. Keduanya wajib untuk
+role `SUPER_ADMIN` (`global`) dan `AUDITOR` (`audit_view`).
+
+### 11.4 SUPER_ADMIN default scope
+
+`global` — bukan `company`. SUPER_ADMIN memiliki visibilitas lintas-company by design.
+Task plan 01d seed memakai `scope=company`; sudah dikoreksi ke `scope=global`.
+
+### 11.5 Lokasi Zod schema + type
+
+- Zod validation schemas → `packages/validation` (sudah ada)
+- Shared TypeScript types → `packages/validation` selama `packages/shared` belum dibuat
+- Task plan 01b menyebut `packages/shared/schemas/user.ts`; sudah dikoreksi ke
+  `packages/validation/src/user.ts`
+
+### 11.6 Conflict precedence
+
+```text
+Global Contract > AUTH Spec > DBD > API Spec > Module Task Plan
+```
+
+Kalau task plan bertentangan dengan Global Contract → task plan yang salah.
+
+---
+
 *Layer 1 selesai → lanjut Layer 2: freeze AUTH ke level buildable (pakai semua kontrak di atas sebagai cetakan).*

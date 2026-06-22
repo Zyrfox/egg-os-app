@@ -5,6 +5,7 @@
     "dev:api": "pnpm --filter @egg-os/api dev",
     "db:generate": "pnpm --filter @egg-os/db db:generate",
     "db:migrate": "pnpm --filter @egg-os/db db:migrate",
+    "db:seed:core": "pnpm --filter @egg-os/db db:seed:core",
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {

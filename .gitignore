@@ -15,9 +15,6 @@ dist/
 .env.*.local
 *.env
 
-# drizzle migrations (generated)
-migrations/
-
 # editor
 .vscode/settings.json
 .idea/
