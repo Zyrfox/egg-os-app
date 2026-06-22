@@ -1,0 +1,5271 @@
+openapi: 3.0.3
+info:
+  title: EGG OS API v0.2
+  version: 0.2.0
+  description: 'Internal operating system API for Easy Going Group. This starter OpenAPI file compiles the API specification
+    modules: Auth, RBAC, Core, Master Data, Inventory, ODR, Approval, Evidence, Audit, Export, Dashboard, Procurement, Complaints,
+    Void/Refund, Correction, Automation, Integration, and System.'
+  contact:
+    name: EGG OS Technical Owner
+    email: juniansyahilham1@gmail.com
+servers:
+- url: http://localhost:8787/api/v1
+  description: Local Development
+- url: https://staging-api.eggos.id/api/v1
+  description: Staging
+- url: https://api.eggos.id/api/v1
+  description: Production
+tags:
+- name: Auth
+  description: Authentication and session management
+- name: Users
+  description: User management
+- name: RBAC
+  description: Role, permission, and access scope management
+- name: Core
+  description: Company, brand, outlet, and department
+- name: Master Data
+  description: Items, aliases, units, categories, vendors, and master data requests
+- name: Inventory
+  description: Current stock, stock movement, opname, waste, emergency use, and transfer
+- name: Daily Reports
+  description: Opening, closing, shift, issue, and operational reports
+- name: Approvals
+  description: Centralized approval workflow
+- name: Evidence
+  description: Evidence upload, signed URL, replacement, and archive
+- name: Audit
+  description: Audit logs, audit flags, and review notes
+- name: Exports
+  description: Export jobs, report types, and downloadable reports
+- name: Dashboard
+  description: Dashboard overview, widgets, alerts, metrics, and tasks
+- name: Procurement
+  description: Purchase requests, receipts, and stock-in from purchase
+- name: Complaints
+  description: Customer complaint and follow-up management
+- name: Void Refund
+  description: Pawoon void/refund reference and audit control
+- name: Corrections
+  description: Correction request flow for final or locked records
+- name: Automation
+  description: n8n automation, notifications, webhook events, and queue
+- name: Integrations
+  description: Pawoon, n8n, storage, email, imports, sync, and webhook integrations
+- name: System
+  description: Settings, feature flags, health, cache, version, and maintenance
+security:
+- bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PathIdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+    CursorParam:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        nullable: true
+    SearchParam:
+      name: search
+      in: query
+      required: false
+      schema:
+        type: string
+        nullable: true
+    DateFromParam:
+      name: date_from
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+        nullable: true
+    DateToParam:
+      name: date_to
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+        nullable: true
+    OutletIdParam:
+      name: outlet_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+        nullable: true
+    BrandIdParam:
+      name: brand_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+        nullable: true
+    DepartmentIdParam:
+      name: department_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+        nullable: true
+  responses:
+    UnauthorizedError:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenError:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ConflictError:
+      description: Conflict or invalid state
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    StandardSuccessResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          nullable: true
+        meta:
+          type: object
+          nullable: true
+          additionalProperties: true
+    Pagination:
+      type: object
+      additionalProperties: false
+      properties:
+        limit:
+          type: integer
+          example: 20
+        next_cursor:
+          type: string
+          nullable: true
+        has_more:
+          type: boolean
+          example: false
+    StandardListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+          nullable: true
+        message:
+          type: string
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ErrorDetail'
+              nullable: true
+            request_id:
+              type: string
+              nullable: true
+    UserSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+    ReasonRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+      required:
+      - reason
+    WorkflowNotesRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        notes:
+          type: string
+          nullable: true
+    SignedUrlResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          additionalProperties: false
+          properties:
+            download_url:
+              type: string
+              format: uri
+            expires_in:
+              type: integer
+              example: 300
+    Severity:
+      type: string
+      enum:
+      - low
+      - medium
+      - high
+      - critical
+    RiskLevel:
+      type: string
+      enum:
+      - low
+      - medium
+      - high
+      - critical
+    Priority:
+      type: string
+      enum:
+      - low
+      - normal
+      - high
+      - urgent
+      - critical
+    PaymentMethod:
+      type: string
+      enum:
+      - cash
+      - qris
+      - debit
+      - credit
+      - transfer
+      - ewallet
+      - other
+      - unknown
+    InventoryItemType:
+      type: string
+      enum:
+      - stock_item
+      - non_stock_item
+      - service
+      - asset
+    StockMovementType:
+      type: string
+      enum:
+      - stock_in
+      - stock_out
+      - adjustment_in
+      - adjustment_out
+      - waste
+      - reject
+      - transfer_out
+      - transfer_in
+      - opname_adjustment
+      - purchase_receipt
+      - emergency_use
+    StockMovementStatus:
+      type: string
+      enum:
+      - draft
+      - submitted
+      - pending_validation
+      - validated
+      - final
+      - rejected
+      - cancelled
+      - correction_requested
+    StockOpnameStatus:
+      type: string
+      enum:
+      - draft
+      - submitted
+      - pending_validation
+      - validated
+      - finalized
+      - rejected
+      - revision_requested
+      - cancelled
+      - correction_requested
+    DailyReportType:
+      type: string
+      enum:
+      - opening
+      - closing
+      - shift_report
+      - daily_summary
+      - incident
+      - other
+    DailyReportStatus:
+      type: string
+      enum:
+      - draft
+      - submitted
+      - pending_validation
+      - validated
+      - rejected
+      - revision_requested
+      - revised
+      - final
+      - correction_requested
+      - adjusted
+      - cancelled
+    DailyIssueStatus:
+      type: string
+      enum:
+      - open
+      - assigned
+      - in_progress
+      - waiting_approval
+      - resolved
+      - closed
+      - reopened
+      - cancelled
+    ChecklistItemType:
+      type: string
+      enum:
+      - checkbox
+      - text
+      - number
+      - photo
+      - select
+      - multi_select
+      - yes_no
+      - time
+      - date
+    ApprovalStatus:
+      type: string
+      enum:
+      - draft
+      - submitted
+      - pending_approval
+      - approved
+      - rejected
+      - revision_requested
+      - revised
+      - escalated
+      - cancelled
+      - expired
+      - closed
+    ApprovalStepStatus:
+      type: string
+      enum:
+      - waiting
+      - pending
+      - approved
+      - rejected
+      - revision_requested
+      - skipped
+      - expired
+    ApprovalLevel:
+      type: string
+      enum:
+      - L1_SPV
+      - L2_MANAGER
+      - L3_FINANCE_OR_DIRECTOR
+      - L4_DIREKSI
+      - L5_DIREKSI_INSPEKTORAT
+    EvidenceType:
+      type: string
+      enum:
+      - photo_before
+      - photo_after
+      - item_photo
+      - invoice
+      - receipt
+      - screenshot
+      - complaint_screenshot
+      - void_refund_screenshot
+      - stock_opname_photo
+      - waste_photo
+      - emergency_use_photo
+      - approval_document
+      - delivery_note
+      - other
+    EvidenceStatus:
+      type: string
+      enum:
+      - active
+      - replaced
+      - archived
+      - locked
+      - rejected
+      - deleted_pending
+    AuditStatus:
+      type: string
+      enum:
+      - success
+      - failed
+      - denied
+      - partial
+      - pending
+    AuditFlagType:
+      type: string
+      enum:
+      - suspicious_activity
+      - suspected_fraud
+      - unauthorized_access
+      - role_permission_change
+      - data_correction
+      - final_record_attempted_edit
+      - missing_evidence
+      - high_value_transaction
+      - repeated_action
+      - automation_failure
+      - export_sensitive_data
+      - other
+    AuditFlagStatus:
+      type: string
+      enum:
+      - open
+      - in_review
+      - resolved
+      - dismissed
+      - cancelled
+    ExportFormat:
+      type: string
+      enum:
+      - xlsx
+      - pdf
+      - csv
+      - json
+      - zip
+    ExportStatus:
+      type: string
+      enum:
+      - queued
+      - processing
+      - success
+      - failed
+      - cancelled
+      - expired
+      - archived
+    DashboardType:
+      type: string
+      enum:
+      - executive
+      - manager
+      - spv
+      - staff
+      - erp_owner
+      - auditor
+      - inventory
+      - operations
+      - commercial
+      - finance
+    DashboardTimeRange:
+      type: string
+      enum:
+      - today
+      - yesterday
+      - last_7_days
+      - last_30_days
+      - this_month
+      - custom
+    DashboardTaskType:
+      type: string
+      enum:
+      - approval
+      - report_validation
+      - missing_evidence
+      - issue
+      - complaint
+      - void_refund
+      - correction
+      - audit
+      - automation
+      - export
+      - other
+    DashboardAlertType:
+      type: string
+      enum:
+      - late_report
+      - pending_approval
+      - missing_evidence
+      - stock_discrepancy
+      - critical_stock
+      - emergency_use
+      - complaint_high
+      - vdr_flagged
+      - audit_critical
+      - automation_failed
+      - export_failed
+      - system
+    DashboardAlertStatus:
+      type: string
+      enum:
+      - open
+      - acknowledged
+      - in_progress
+      - resolved
+      - dismissed
+      - expired
+    PurchaseRequestType:
+      type: string
+      enum:
+      - routine
+      - urgent
+      - emergency
+      - replacement
+      - service
+      - asset
+      - other
+    PurchaseRequestStatus:
+      type: string
+      enum:
+      - draft
+      - submitted
+      - pending_approval
+      - approved
+      - rejected
+      - revision_requested
+      - revised
+      - ordered
+      - partially_received
+      - received
+      - stocked
+      - closed
+      - cancelled
+    PurchaseReceiptStatus:
+      type: string
+      enum:
+      - draft
+      - submitted
+      - pending_validation
+      - validated
+      - rejected
+      - revision_requested
+      - final
+      - stocked
+      - cancelled
+    ReceiptLineCondition:
+      type: string
+      enum:
+      - good
+      - partial_damage
+      - damaged
+      - wrong_item
+      - short_quantity
+      - extra_quantity
+    ComplaintStatus:
+      type: string
+      enum:
+      - open
+      - assigned
+      - in_progress
+      - waiting_customer
+      - waiting_internal
+      - resolved
+      - closed
+      - reopened
+      - cancelled
+    ComplaintChannel:
+      type: string
+      enum:
+      - instagram_dm
+      - instagram_comment
+      - google_review
+      - whatsapp
+      - phone_call
+      - walk_in
+      - cashier_report
+      - spv_report
+      - manager_report
+      - tiktok_comment
+      - other
+    ComplaintCategory:
+      type: string
+      enum:
+      - product_quality
+      - service_quality
+      - cleanliness
+      - facility
+      - pricing_payment
+      - staff_behavior
+      - queue_waiting
+      - reservation
+      - delivery
+      - safety_security
+      - animal_welfare
+      - misinformation
+      - other
+    ComplaintFollowUpType:
+      type: string
+      enum:
+      - customer_reply
+      - internal_note
+      - outlet_coordination
+      - evidence_request
+      - service_recovery
+      - manager_review
+      - customer_waiting
+      - other
+    ComplaintResolutionType:
+      type: string
+      enum:
+      - apology_and_explanation
+      - refund
+      - replacement
+      - voucher
+      - staff_briefing
+      - facility_fixed
+      - no_issue_found
+      - customer_unreachable
+      - other
+    VoidRefundStatus:
+      type: string
+      enum:
+      - draft
+      - submitted
+      - pending_review
+      - reviewed
+      - pending_approval
+      - approved
+      - rejected
+      - flagged
+      - correction_requested
+      - closed
+      - cancelled
+    VoidRefundRequestType:
+      type: string
+      enum:
+      - void
+      - refund
+      - partial_refund
+      - price_correction
+      - discount_correction
+      - payment_correction
+      - duplicate_transaction
+      - other
+    VoidRefundReasonCategory:
+      type: string
+      enum:
+      - wrong_order
+      - customer_complaint
+      - cashier_error
+      - system_error
+      - duplicate_payment
+      - payment_failed
+      - product_unavailable
+      - price_mismatch
+      - manager_instruction
+      - fraud_suspected
+      - other
+    VoidRefundReviewDecision:
+      type: string
+      enum:
+      - reviewed
+      - approve_recommended
+      - reject_recommended
+      - correction_requested
+      - flag
+      - escalate
+    VoidRefundReviewType:
+      type: string
+      enum:
+      - spv_review
+      - manager_review
+      - finance_review
+      - audit_note
+      - direksi_note
+      - system_note
+      - other
+    VoidRefundFlagType:
+      type: string
+      enum:
+      - repeated_refund
+      - high_amount
+      - same_cashier_pattern
+      - same_customer_pattern
+      - missing_evidence
+      - suspicious_reason
+      - after_hours_activity
+      - manual_override
+      - suspected_fraud
+      - other
+    CorrectionStatus:
+      type: string
+      enum:
+      - draft
+      - submitted
+      - pending_review
+      - reviewed
+      - pending_approval
+      - approved
+      - rejected
+      - revision_requested
+      - revised
+      - applied
+      - apply_failed
+      - cancelled
+      - closed
+    CorrectionType:
+      type: string
+      enum:
+      - data_entry_error
+      - wrong_quantity
+      - wrong_item
+      - wrong_date
+      - wrong_status
+      - wrong_amount
+      - missing_data
+      - duplicate_record
+      - invalid_evidence
+      - final_record_correction
+      - inventory_adjustment
+      - approval_correction
+      - other
+    AutomationWorkflowStatus:
+      type: string
+      enum:
+      - draft
+      - active
+      - paused
+      - failed
+      - archived
+    AutomationWorkflowType:
+      type: string
+      enum:
+      - notification
+      - scheduled
+      - webhook
+      - digest
+      - integration
+      - system
+    AutomationExecutionStatus:
+      type: string
+      enum:
+      - queued
+      - running
+      - success
+      - failed
+      - retrying
+      - cancelled
+      - skipped
+      - timeout
+    AutomationQueueStatus:
+      type: string
+      enum:
+      - queued
+      - processing
+      - sent
+      - failed
+      - retrying
+      - cancelled
+      - expired
+    NotificationType:
+      type: string
+      enum:
+      - email
+      - whatsapp
+      - telegram
+      - in_app
+      - webhook
+      - digest
+    WebhookProcessingStatus:
+      type: string
+      enum:
+      - received
+      - processing
+      - processed
+      - failed
+      - ignored
+      - duplicate
+    IntegrationType:
+      type: string
+      enum:
+      - pos
+      - automation
+      - email
+      - storage
+      - spreadsheet
+      - file_storage
+      - webhook
+      - payment
+      - other
+    IntegrationStatus:
+      type: string
+      enum:
+      - draft
+      - active
+      - paused
+      - error
+      - archived
+    ConnectionStatus:
+      type: string
+      enum:
+      - not_configured
+      - connected
+      - disconnected
+      - degraded
+      - failed
+      - unknown
+    SyncMode:
+      type: string
+      enum:
+      - manual_import
+      - api_pull
+      - api_push
+      - webhook
+      - hybrid
+    SyncJobStatus:
+      type: string
+      enum:
+      - queued
+      - processing
+      - success
+      - partial_success
+      - failed
+      - cancelled
+      - retrying
+    SyncType:
+      type: string
+      enum:
+      - transactions
+      - void_refunds
+      - items
+      - payments
+      - sales_summary
+      - inventory_reference
+      - users
+      - custom
+    PawoonTransactionStatus:
+      type: string
+      enum:
+      - paid
+      - voided
+      - refunded
+      - partial_refunded
+      - cancelled
+      - unknown
+    MappingStatus:
+      type: string
+      enum:
+      - unmapped
+      - mapped
+      - ignored
+      - needs_review
+      - conflict
+    SystemSettingValueType:
+      type: string
+      enum:
+      - string
+      - number
+      - boolean
+      - json
+      - array
+      - date
+      - datetime
+    FeatureRolloutType:
+      type: string
+      enum:
+      - manual
+      - percentage
+      - role_based
+      - outlet_based
+      - environment_based
+      - internal_only
+    SystemCacheType:
+      type: string
+      enum:
+      - settings
+      - permissions
+      - master_data
+      - dashboard_metrics
+      - feature_flags
+      - report_templates
+      - all
+    LoginRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+      required:
+      - email
+      - password
+    EmailRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+      - email
+    TokenPasswordRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        token:
+          type: string
+        new_password:
+          type: string
+          format: password
+      required:
+      - token
+      - new_password
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        current_password:
+          type: string
+          format: password
+        new_password:
+          type: string
+          format: password
+      required:
+      - current_password
+      - new_password
+    CreateUserRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        role_codes:
+          type: array
+          items:
+            type: string
+      required:
+      - full_name
+      - email
+    UpdateUserRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        full_name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        status:
+          type: string
+    UpdateUserStatusRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        status:
+          type: string
+          enum:
+          - active
+          - inactive
+          - suspended
+          - archived
+        reason:
+          type: string
+      required:
+      - status
+      - reason
+    AssignUserRoleRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        role_code:
+          type: string
+        scope:
+          type: object
+          additionalProperties: true
+      required:
+      - role_code
+    CreateRoleRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        role_code:
+          type: string
+        role_name:
+          type: string
+      required:
+      - role_code
+      - role_name
+    UpdateRoleRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        role_name:
+          type: string
+        reason:
+          type: string
+    UpdateRolePermissionsRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        permission_codes:
+          type: array
+          items:
+            type: string
+        reason:
+          type: string
+      required:
+      - permission_codes
+      - reason
+    CreateAccessOverrideRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        permission_code:
+          type: string
+        effect:
+          type: string
+          enum:
+          - allow
+          - deny
+        reason:
+          type: string
+      required:
+      - user_id
+      - permission_code
+      - effect
+      - reason
+    CreateBrandRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        brand_code:
+          type: string
+        brand_name:
+          type: string
+      required:
+      - brand_code
+      - brand_name
+    CreateOutletRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        brand_id:
+          type: string
+          format: uuid
+        outlet_code:
+          type: string
+        outlet_name:
+          type: string
+      required:
+      - brand_id
+      - outlet_code
+      - outlet_name
+    CreateDepartmentRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        department_code:
+          type: string
+        department_name:
+          type: string
+      required:
+      - department_code
+      - department_name
+    CreateStorageLocationRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        outlet_id:
+          type: string
+          format: uuid
+        storage_code:
+          type: string
+        storage_name:
+          type: string
+      required:
+      - outlet_id
+      - storage_code
+      - storage_name
+    CreateCategoryRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        category_code:
+          type: string
+        category_name:
+          type: string
+      required:
+      - category_code
+      - category_name
+    CreateUnitRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        unit_code:
+          type: string
+        unit_name:
+          type: string
+      required:
+      - unit_code
+      - unit_name
+    CreateInventoryItemRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        item_code:
+          type: string
+        standard_name:
+          type: string
+        base_unit_id:
+          type: string
+          format: uuid
+        item_type:
+          $ref: '#/components/schemas/InventoryItemType'
+        aliases:
+          type: array
+          items:
+            type: string
+      required:
+      - item_code
+      - standard_name
+      - base_unit_id
+      - item_type
+    UpdateInventoryItemRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        standard_name:
+          type: string
+        reason:
+          type: string
+    CreateItemAliasRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        alias_name:
+          type: string
+          example: Telor Kitchen
+      required:
+      - item_id
+      - alias_name
+    ItemLookupResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+    CreateVendorRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        vendor_name:
+          type: string
+        vendor_type:
+          type: string
+      required:
+      - vendor_name
+    CreateMasterDataRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        request_type:
+          type: string
+        title:
+          type: string
+        reason:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+      required:
+      - request_type
+      - title
+      - reason
+      - payload
+    ReviewMasterDataRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        decision:
+          type: string
+          enum:
+          - approve
+          - reject
+          - revision_requested
+          - merge_duplicate
+        notes:
+          type: string
+          nullable: true
+      required:
+      - decision
+    StockMovementLineInput:
+      type: object
+      additionalProperties: true
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+        unit_id:
+          type: string
+          format: uuid
+      required:
+      - item_id
+      - quantity
+      - unit_id
+    CreateStockMovementRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        outlet_id:
+          type: string
+          format: uuid
+        storage_location_id:
+          type: string
+          format: uuid
+        movement_type:
+          $ref: '#/components/schemas/StockMovementType'
+        movement_date:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockMovementLineInput'
+        submit:
+          type: boolean
+          default: false
+      required:
+      - outlet_id
+      - storage_location_id
+      - movement_type
+      - movement_date
+      - items
+    UpdateStockMovementRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        movement_date:
+          type: string
+          format: date
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockMovementLineInput'
+        update_reason:
+          type: string
+    ValidateStockMovementRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        decision:
+          type: string
+          enum:
+          - validate
+          - reject
+          - revision_requested
+        notes:
+          type: string
+      required:
+      - decision
+    StockOpnameLineInput:
+      type: object
+      additionalProperties: true
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        physical_quantity:
+          type: number
+        unit_id:
+          type: string
+          format: uuid
+      required:
+      - item_id
+      - physical_quantity
+      - unit_id
+    CreateStockOpnameRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        outlet_id:
+          type: string
+          format: uuid
+        storage_location_id:
+          type: string
+          format: uuid
+        opname_type:
+          type: string
+          enum:
+          - daily
+          - monthly
+          - random
+          - closing
+          - audit
+        opname_date:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockOpnameLineInput'
+      required:
+      - outlet_id
+      - storage_location_id
+      - opname_type
+      - opname_date
+      - items
+    ValidateStockOpnameRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        decision:
+          type: string
+          enum:
+          - validate
+          - reject
+          - revision_requested
+        notes:
+          type: string
+      required:
+      - decision
+    CreateWasteRecordRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        outlet_id:
+          type: string
+          format: uuid
+        storage_location_id:
+          type: string
+          format: uuid
+        item_id:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+        unit_id:
+          type: string
+          format: uuid
+        waste_type:
+          type: string
+        reason:
+          type: string
+      required:
+      - outlet_id
+      - storage_location_id
+      - item_id
+      - quantity
+      - unit_id
+      - waste_type
+      - reason
+    CreateEmergencyUseRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        outlet_id:
+          type: string
+          format: uuid
+        storage_location_id:
+          type: string
+          format: uuid
+        item_id:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+        unit_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+      required:
+      - outlet_id
+      - storage_location_id
+      - item_id
+      - quantity
+      - unit_id
+      - reason
+    CreateDailyReportTemplateRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - template_code
+      - template_name
+      - report_type
+      - items
+    UpdateDailyReportTemplateRequest:
+      type: object
+      additionalProperties: true
+    CreateDailyReportRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - outlet_id
+      - report_type
+      - report_date
+    UpdateDailyReportRequest:
+      type: object
+      additionalProperties: true
+    UpdateDailyReportItemsRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - items
+    ValidateDailyReportRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - decision
+    CreateDailyIssueRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - outlet_id
+      - title
+      - severity
+    AssignIssueRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - assigned_to
+    ResolveIssueRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - resolution_notes
+    CreateApprovalRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - related_module
+      - related_record_type
+      - related_record_id
+      - title
+      - approval_type
+      - risk_level
+    DecideApprovalRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - decision
+    CreateApprovalCommentRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - comment
+    CreateApprovalRuleRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - rule_code
+      - rule_name
+      - related_module
+      - approval_type
+      - conditions
+      - steps
+    UpdateApprovalRuleRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - reason
+    UploadEvidenceRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - file
+      - related_module
+      - related_record_type
+      - related_record_id
+      - evidence_type
+    ReplaceEvidenceRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - file
+      - reason
+    ValidateRequiredEvidenceRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - related_module
+      - related_record_type
+      - related_record_id
+    CreateAuditReviewNoteRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - notes
+    CreateAuditFlagRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - module
+      - flag_type
+      - severity
+      - title
+      - description
+    ReviewAuditFlagRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - notes
+    ResolveAuditFlagRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - resolution_type
+      - notes
+    CreateAuditExportRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - date_from
+      - date_to
+      - export_format
+      - reason
+    CreateExportJobRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - module
+      - report_type
+      - export_format
+    CreateExportTemplateRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - template_code
+      - template_name
+      - module
+      - report_type
+      - export_format
+      - columns
+    UpdateExportTemplateRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - reason
+    AssignDashboardAlertRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - assigned_to
+    ResolveDashboardAlertRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - resolution_notes
+    UpdateDashboardPreferenceRequest:
+      type: object
+      additionalProperties: true
+    CreatePurchaseRequestRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - outlet_id
+      - request_type
+      - priority
+      - needed_date
+      - lines
+    UpdatePurchaseRequestRequest:
+      type: object
+      additionalProperties: true
+    CreatePurchaseReceiptRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - receipt_date
+      - storage_location_id
+      - lines
+    UpdatePurchaseReceiptRequest:
+      type: object
+      additionalProperties: true
+    ValidatePurchaseReceiptRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - decision
+    StockInPurchaseReceiptRequest:
+      type: object
+      additionalProperties: true
+    CreateComplaintRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - outlet_id
+      - channel
+      - category
+      - severity
+      - title
+      - description
+    UpdateComplaintRequest:
+      type: object
+      additionalProperties: true
+    AssignComplaintRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - assigned_to
+    CreateComplaintFollowUpRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - follow_up_type
+      - message_summary
+    ResolveComplaintRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - resolution_type
+      - resolution_summary
+    CloseComplaintRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - close_notes
+    CreateVoidRefundRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - outlet_id
+      - pos_provider
+      - pos_receipt_number
+      - transaction_date
+      - request_type
+      - reason_category
+      - reason_detail
+      - original_amount
+      - void_refund_amount
+    UpdateVoidRefundRequest:
+      type: object
+      additionalProperties: true
+    ReviewVoidRefundRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - decision
+      - review_type
+    FlagVoidRefundRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - flag_type
+      - severity
+      - title
+    CloseVoidRefundRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - close_notes
+    CancelVoidRefundRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - reason
+    CreateVoidRefundReviewNoteRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - review_type
+      - decision
+      - notes
+    CreateCorrectionRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - related_module
+      - related_record_type
+      - related_record_id
+      - correction_type
+      - title
+      - reason
+      - changes
+    UpdateCorrectionRequest:
+      type: object
+      additionalProperties: true
+    ReviewCorrectionRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - decision
+    ApplyCorrectionRequest:
+      type: object
+      additionalProperties: true
+    CreateAutomationWorkflowRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - workflow_code
+      - workflow_name
+      - workflow_type
+      - trigger_module
+      - trigger_event
+    UpdateAutomationWorkflowRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - reason
+    TestAutomationWorkflowRequest:
+      type: object
+      additionalProperties: true
+    AutomationWebhookEventRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - source
+      - event_type
+      - workflow_code
+      - status
+    SendNotificationRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - notification_type
+      - template_code
+      - recipient_type
+      - payload
+    SendTestNotificationRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - notification_type
+      - template_code
+      - recipient_email
+      - payload
+    CreateNotificationTemplateRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - template_code
+      - template_name
+      - notification_type
+      - body_template
+    UpdateNotificationTemplateRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - reason
+    CreateIntegrationRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - integration_code
+      - integration_name
+      - integration_type
+      - provider
+      - sync_mode
+    UpdateIntegrationRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - reason
+    TestIntegrationConnectionRequest:
+      type: object
+      additionalProperties: true
+    StartSyncRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - sync_type
+      - reason
+    RetrySyncJobRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - reason
+    PawoonImportRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - file
+      - outlet_id
+      - import_type
+      - reason
+    PawoonSyncRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - outlet_id
+      - sync_type
+      - reason
+    CreatePawoonItemMappingRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - outlet_id
+      - external_item_id
+      - external_item_name
+      - internal_item_id
+    CreateImportJobRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - file
+      - provider
+      - import_type
+      - reason
+    ValidateImportJobRequest:
+      type: object
+      additionalProperties: true
+    ApplyImportJobRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - apply_mode
+    CreateSystemSettingRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - setting_key
+      - setting_group
+      - setting_name
+      - value_type
+      - setting_value
+      - reason
+    UpdateSystemSettingRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - setting_value
+      - reason
+    UpdateFeatureFlagRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - reason
+    SystemCacheRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - cache_type
+      - reason
+    UpdateMaintenanceRequest:
+      type: object
+      additionalProperties: true
+      required:
+      - maintenance_mode
+      - reason
+paths:
+  /auth/login:
+    post:
+      tags:
+      - Auth
+      summary: Login user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200': &id001
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardSuccessResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /auth/logout:
+    post:
+      tags:
+      - Auth
+      summary: Logout user
+      responses:
+        '200': *id001
+  /auth/refresh:
+    post:
+      tags:
+      - Auth
+      summary: Refresh access token
+      security: []
+      responses:
+        '200': *id001
+  /auth/me:
+    get:
+      tags:
+      - Auth
+      summary: Get current user profile
+      responses:
+        '200': *id001
+  /auth/me/permissions:
+    get:
+      tags:
+      - Auth
+      summary: Get current user permissions
+      responses:
+        '200': *id001
+  /auth/request-password-reset:
+    post:
+      tags:
+      - Auth
+      summary: Request password reset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailRequest'
+      responses:
+        '200': *id001
+  /auth/reset-password:
+    post:
+      tags:
+      - Auth
+      summary: Reset password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenPasswordRequest'
+      responses:
+        '200': *id001
+  /auth/set-password:
+    post:
+      tags:
+      - Auth
+      summary: Set first password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenPasswordRequest'
+      responses:
+        '200': *id001
+  /auth/change-password:
+    post:
+      tags:
+      - Auth
+      summary: Change own password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200': *id001
+  /users:
+    get:
+      tags:
+      - Users
+      summary: List users
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': &id002
+          description: List response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardListResponse'
+    post:
+      tags:
+      - Users
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201': &id003
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardSuccessResponse'
+  /users/{id}:
+    get:
+      tags:
+      - Users
+      summary: Get user detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Users
+      summary: Update user
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200': *id001
+  /users/{id}/status:
+    patch:
+      tags:
+      - Users
+      summary: Update user status
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserStatusRequest'
+      responses:
+        '200': *id001
+  /users/{id}/send-invitation:
+    post:
+      tags:
+      - Users
+      summary: Send user invitation
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+  /users/{id}/reset-password-link:
+    post:
+      tags:
+      - Users
+      summary: Send reset password link
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+  /users/{id}/roles:
+    get:
+      tags:
+      - RBAC
+      summary: List user roles
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - RBAC
+      summary: Assign user role
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignUserRoleRequest'
+      responses:
+        '201': *id003
+  /users/{id}/roles/{user_role_id}:
+    delete:
+      tags:
+      - RBAC
+      summary: Remove user role
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      - name: user_role_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: User role removed
+  /roles:
+    get:
+      tags:
+      - RBAC
+      summary: List roles
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - RBAC
+      summary: Create role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleRequest'
+      responses:
+        '201': *id003
+  /roles/{id}:
+    get:
+      tags:
+      - RBAC
+      summary: Get role detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - RBAC
+      summary: Update role
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleRequest'
+      responses:
+        '200': *id001
+  /roles/{id}/permissions:
+    get:
+      tags:
+      - RBAC
+      summary: List role permissions
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+    put:
+      tags:
+      - RBAC
+      summary: Replace role permissions
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRolePermissionsRequest'
+      responses:
+        '200': *id001
+  /permissions:
+    get:
+      tags:
+      - RBAC
+      summary: List permissions
+      responses:
+        '200': *id002
+  /rbac/access-overrides:
+    get:
+      tags:
+      - RBAC
+      summary: List access overrides
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - RBAC
+      summary: Create access override
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccessOverrideRequest'
+      responses:
+        '201': *id003
+  /companies:
+    get:
+      tags:
+      - Core
+      summary: List companies
+      responses:
+        '200': *id002
+  /brands:
+    get:
+      tags:
+      - Core
+      summary: List brands
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Core
+      summary: Create brand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBrandRequest'
+      responses:
+        '201': *id003
+  /outlets:
+    get:
+      tags:
+      - Core
+      summary: List outlets
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Core
+      summary: Create outlet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOutletRequest'
+      responses:
+        '201': *id003
+  /departments:
+    get:
+      tags:
+      - Core
+      summary: List departments
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Core
+      summary: Create department
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepartmentRequest'
+      responses:
+        '201': *id003
+  /master-data/storage-locations:
+    get:
+      tags:
+      - Master Data
+      summary: List storage locations
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Master Data
+      summary: Create storage location
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStorageLocationRequest'
+      responses:
+        '201': *id003
+  /master-data/categories:
+    get:
+      tags:
+      - Master Data
+      summary: List categorys
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Master Data
+      summary: Create category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '201': *id003
+  /master-data/units:
+    get:
+      tags:
+      - Master Data
+      summary: List units
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Master Data
+      summary: Create unit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUnitRequest'
+      responses:
+        '201': *id003
+  /master-data/items:
+    get:
+      tags:
+      - Master Data
+      summary: List inventory items
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Master Data
+      summary: Create inventory item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryItemRequest'
+      responses:
+        '201': *id003
+  /master-data/item-aliases:
+    get:
+      tags:
+      - Master Data
+      summary: List item aliass
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Master Data
+      summary: Create item alias
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateItemAliasRequest'
+      responses:
+        '201': *id003
+  /master-data/vendors:
+    get:
+      tags:
+      - Master Data
+      summary: List vendors
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Master Data
+      summary: Create vendor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVendorRequest'
+      responses:
+        '201': *id003
+  /master-data/requests:
+    get:
+      tags:
+      - Master Data
+      summary: List master data requests
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Master Data
+      summary: Create master data request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMasterDataRequest'
+      responses:
+        '201': *id003
+  /master-data/items/{id}:
+    get:
+      tags:
+      - Master Data
+      summary: Get inventory item detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Master Data
+      summary: Update inventory item
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInventoryItemRequest'
+      responses:
+        '200': *id001
+  /master-data/lookup/items:
+    get:
+      tags:
+      - Master Data
+      summary: Lookup item by standard name or alias
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OutletIdParam'
+      responses:
+        '200':
+          description: Item lookup response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemLookupResponse'
+  /master-data/requests/{id}/review:
+    patch:
+      tags:
+      - Master Data
+      summary: Review master data request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewMasterDataRequest'
+      responses:
+        '200': *id001
+  /inventory/current-stocks:
+    get:
+      tags:
+      - Inventory
+      summary: List current stock
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /inventory/stock-movements:
+    get:
+      tags:
+      - Inventory
+      summary: List stock movements
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Inventory
+      summary: Create stock movement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStockMovementRequest'
+      responses:
+        '201': *id003
+  /inventory/stock-movements/{id}:
+    get:
+      tags:
+      - Inventory
+      summary: Get stock movement detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Inventory
+      summary: Update stock movement
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStockMovementRequest'
+      responses:
+        '200': *id001
+  /inventory/stock-movements/{id}/submit:
+    patch:
+      tags:
+      - Inventory
+      summary: Submit stock movement
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /inventory/stock-movements/{id}/validate:
+    patch:
+      tags:
+      - Inventory
+      summary: Validate stock movement
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateStockMovementRequest'
+      responses:
+        '200': *id001
+  /inventory/stock-opnames:
+    get:
+      tags:
+      - Inventory
+      summary: List stock opnames
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Inventory
+      summary: Create stock opname
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStockOpnameRequest'
+      responses:
+        '201': *id003
+  /inventory/stock-opnames/{id}/submit:
+    patch:
+      tags:
+      - Inventory
+      summary: Submit stock opname
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /inventory/stock-opnames/{id}/validate:
+    patch:
+      tags:
+      - Inventory
+      summary: Validate stock opname
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateStockOpnameRequest'
+      responses:
+        '200': *id001
+  /inventory/stock-opnames/{id}/finalize:
+    patch:
+      tags:
+      - Inventory
+      summary: Finalize stock opname
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /inventory/waste-records:
+    get:
+      tags:
+      - Inventory
+      summary: List waste or reject records
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Inventory
+      summary: Create waste or reject record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWasteRecordRequest'
+      responses:
+        '201': *id003
+  /inventory/emergency-use:
+    get:
+      tags:
+      - Inventory
+      summary: List emergency use records
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Inventory
+      summary: Create emergency use record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmergencyUseRequest'
+      responses:
+        '201': *id003
+  /daily-reports/templates:
+    get:
+      tags:
+      - Daily Reports
+      summary: List daily report templates
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Daily Reports
+      summary: Create daily report template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDailyReportTemplateRequest'
+      responses:
+        '201': *id003
+  /daily-reports/templates/{id}:
+    get:
+      tags:
+      - Daily Reports
+      summary: Get daily report template detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Daily Reports
+      summary: Update daily report template
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDailyReportTemplateRequest'
+      responses:
+        '200': *id001
+  /daily-reports/templates/{id}/activate:
+    patch:
+      tags:
+      - Daily Reports
+      summary: Activate daily report template
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /daily-reports/templates/{id}/archive:
+    patch:
+      tags:
+      - Daily Reports
+      summary: Archive daily report template
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /daily-reports:
+    get:
+      tags:
+      - Daily Reports
+      summary: List daily reports
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Daily Reports
+      summary: Create daily report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDailyReportRequest'
+      responses:
+        '201': *id003
+  /daily-reports/{id}:
+    get:
+      tags:
+      - Daily Reports
+      summary: Get daily report detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Daily Reports
+      summary: Update daily report
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDailyReportRequest'
+      responses:
+        '200': *id001
+  /daily-reports/{id}/submit:
+    patch:
+      tags:
+      - Daily Reports
+      summary: Submit daily report
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /daily-reports/{id}/validate:
+    patch:
+      tags:
+      - Daily Reports
+      summary: Validate daily report
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateDailyReportRequest'
+      responses:
+        '200': *id001
+  /daily-reports/{id}/finalize:
+    patch:
+      tags:
+      - Daily Reports
+      summary: Finalize daily report
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /daily-reports/{id}/items:
+    get:
+      tags:
+      - Daily Reports
+      summary: List daily report items
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+    patch:
+      tags:
+      - Daily Reports
+      summary: Update daily report items
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDailyReportItemsRequest'
+      responses:
+        '200': *id001
+  /daily-reports/{id}/issues:
+    post:
+      tags:
+      - Daily Reports
+      summary: Create issue from daily report
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDailyIssueRequest'
+      responses:
+        '201': *id003
+  /daily-issues:
+    get:
+      tags:
+      - Daily Reports
+      summary: List daily issues
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Daily Reports
+      summary: Create daily issue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDailyIssueRequest'
+      responses:
+        '201': *id003
+  /daily-issues/{id}/assign:
+    patch:
+      tags:
+      - Daily Reports
+      summary: Assign daily issue
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignIssueRequest'
+      responses:
+        '200': *id001
+  /daily-issues/{id}/resolve:
+    patch:
+      tags:
+      - Daily Reports
+      summary: Resolve daily issue
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveIssueRequest'
+      responses:
+        '200': *id001
+  /daily-issues/{id}/close:
+    patch:
+      tags:
+      - Daily Reports
+      summary: Close daily issue
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /daily-reports/compliance:
+    get:
+      tags:
+      - Daily Reports
+      summary: Get daily report compliance summary
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      responses:
+        '200': *id001
+  /daily-reports/missing:
+    get:
+      tags:
+      - Daily Reports
+      summary: List missing daily reports
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      responses:
+        '200': *id002
+  /approvals:
+    get:
+      tags:
+      - Approvals
+      summary: List approval requests
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Approvals
+      summary: Create approval request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApprovalRequest'
+      responses:
+        '201': *id003
+  /approvals/my-tasks:
+    get:
+      tags:
+      - Approvals
+      summary: List my approval tasks
+      parameters:
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /approvals/{id}:
+    get:
+      tags:
+      - Approvals
+      summary: Get approval request detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+  /approvals/{id}/submit:
+    patch:
+      tags:
+      - Approvals
+      summary: Submit approval request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /approvals/{id}/decide:
+    patch:
+      tags:
+      - Approvals
+      summary: Decide approval request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecideApprovalRequest'
+      responses:
+        '200': *id001
+  /approvals/{id}/comments:
+    get:
+      tags:
+      - Approvals
+      summary: List approval comments
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Approvals
+      summary: Add approval comment
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApprovalCommentRequest'
+      responses:
+        '201': *id003
+  /approvals/{id}/history:
+    get:
+      tags:
+      - Approvals
+      summary: List approval history
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+  /approvals/rules:
+    get:
+      tags:
+      - Approvals
+      summary: List approval rules
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Approvals
+      summary: Create approval rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApprovalRuleRequest'
+      responses:
+        '201': *id003
+  /approvals/rules/{id}:
+    patch:
+      tags:
+      - Approvals
+      summary: Update approval rule
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateApprovalRuleRequest'
+      responses:
+        '200': *id001
+  /evidence:
+    get:
+      tags:
+      - Evidence
+      summary: List evidence files
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /evidence/upload:
+    post:
+      tags:
+      - Evidence
+      summary: Upload evidence file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UploadEvidenceRequest'
+      responses:
+        '201': *id003
+  /evidence/{id}:
+    get:
+      tags:
+      - Evidence
+      summary: Get evidence detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+  /evidence/{id}/download-url:
+    get:
+      tags:
+      - Evidence
+      summary: Generate evidence signed download URL
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200':
+          description: Signed URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedUrlResponse'
+  /evidence/{id}/replace:
+    patch:
+      tags:
+      - Evidence
+      summary: Replace evidence file
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReplaceEvidenceRequest'
+      responses:
+        '200': *id001
+  /evidence/{id}/archive:
+    patch:
+      tags:
+      - Evidence
+      summary: Archive evidence
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /evidence/requirements:
+    get:
+      tags:
+      - Evidence
+      summary: Get evidence requirements
+      responses:
+        '200': *id001
+  /evidence/validate-required:
+    post:
+      tags:
+      - Evidence
+      summary: Validate required evidence completeness
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateRequiredEvidenceRequest'
+      responses:
+        '200': *id001
+  /evidence/linked-records/{record_type}/{record_id}:
+    get:
+      tags:
+      - Evidence
+      summary: List evidence linked to a record
+      parameters:
+      - name: record_type
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200': *id002
+  /audit/logs:
+    get:
+      tags:
+      - Audit
+      summary: List audit logs
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /audit/logs/{id}:
+    get:
+      tags:
+      - Audit
+      summary: Get audit log detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+  /audit/logs/{id}/details:
+    get:
+      tags:
+      - Audit
+      summary: Get audit log field changes
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+  /audit/logs/{id}/review-notes:
+    post:
+      tags:
+      - Audit
+      summary: Add audit review note
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAuditReviewNoteRequest'
+      responses:
+        '201': *id003
+  /audit/flags:
+    get:
+      tags:
+      - Audit
+      summary: List audit flags
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Audit
+      summary: Create audit flag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAuditFlagRequest'
+      responses:
+        '201': *id003
+  /audit/flags/{id}:
+    get:
+      tags:
+      - Audit
+      summary: Get audit flag detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+  /audit/flags/{id}/review:
+    patch:
+      tags:
+      - Audit
+      summary: Review audit flag
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewAuditFlagRequest'
+      responses:
+        '200': *id001
+  /audit/flags/{id}/resolve:
+    patch:
+      tags:
+      - Audit
+      summary: Resolve audit flag
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveAuditFlagRequest'
+      responses:
+        '200': *id001
+  /audit/flags/{id}/dismiss:
+    patch:
+      tags:
+      - Audit
+      summary: Dismiss audit flag
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /audit/summary:
+    get:
+      tags:
+      - Audit
+      summary: Get audit summary
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      responses:
+        '200': *id001
+  /audit/export-history:
+    get:
+      tags:
+      - Audit
+      summary: List audit export history
+      responses:
+        '200': *id002
+  /audit/export:
+    post:
+      tags:
+      - Audit
+      summary: Request audit export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAuditExportRequest'
+      responses:
+        '201': *id003
+  /exports:
+    get:
+      tags:
+      - Exports
+      summary: List export jobs
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Exports
+      summary: Create export job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExportJobRequest'
+      responses:
+        '201': *id003
+  /exports/{id}:
+    get:
+      tags:
+      - Exports
+      summary: Get export job detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    delete:
+      tags:
+      - Exports
+      summary: Archive export job
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '204':
+          description: Export archived
+  /exports/{id}/download-url:
+    get:
+      tags:
+      - Exports
+      summary: Generate export signed download URL
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200':
+          description: Signed URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedUrlResponse'
+  /exports/{id}/cancel:
+    patch:
+      tags:
+      - Exports
+      summary: Cancel export job
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /exports/report-types:
+    get:
+      tags:
+      - Exports
+      summary: List available report types
+      responses:
+        '200': *id002
+  /exports/report-types/{report_type}:
+    get:
+      tags:
+      - Exports
+      summary: Get report type detail
+      parameters:
+      - name: report_type
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200': *id001
+  /exports/templates:
+    get:
+      tags:
+      - Exports
+      summary: List export templates
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Exports
+      summary: Create export template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExportTemplateRequest'
+      responses:
+        '201': *id003
+  /exports/templates/{id}:
+    patch:
+      tags:
+      - Exports
+      summary: Update export template
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExportTemplateRequest'
+      responses:
+        '200': *id001
+  /dashboard/overview:
+    get:
+      tags:
+      - Dashboard
+      summary: Get dashboard overview
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      responses:
+        '200': *id001
+  /dashboard/my-tasks:
+    get:
+      tags:
+      - Dashboard
+      summary: Get current user dashboard tasks
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /dashboard/widgets:
+    get:
+      tags:
+      - Dashboard
+      summary: List dashboard widgets
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      responses:
+        '200': *id002
+  /dashboard/alerts:
+    get:
+      tags:
+      - Dashboard
+      summary: List dashboard alerts
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /dashboard/metrics:
+    get:
+      tags:
+      - Dashboard
+      summary: Get dashboard metrics
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      responses:
+        '200': *id001
+  /dashboard/snapshots:
+    get:
+      tags:
+      - Dashboard
+      summary: List dashboard metric snapshots
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      responses:
+        '200': *id002
+  /dashboard/widgets/{widget_code}/data:
+    get:
+      tags:
+      - Dashboard
+      summary: Get dashboard widget data
+      parameters:
+      - name: widget_code
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OutletIdParam'
+      responses:
+        '200': *id001
+  /dashboard/alerts/{id}/acknowledge:
+    patch:
+      tags:
+      - Dashboard
+      summary: Acknowledge dashboard alert
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /dashboard/alerts/{id}/assign:
+    patch:
+      tags:
+      - Dashboard
+      summary: Assign dashboard alert
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignDashboardAlertRequest'
+      responses:
+        '200': *id001
+  /dashboard/alerts/{id}/resolve:
+    patch:
+      tags:
+      - Dashboard
+      summary: Resolve dashboard alert
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveDashboardAlertRequest'
+      responses:
+        '200': *id001
+  /dashboard/alerts/{id}/dismiss:
+    patch:
+      tags:
+      - Dashboard
+      summary: Dismiss dashboard alert
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /dashboard/preferences:
+    get:
+      tags:
+      - Dashboard
+      summary: Get current user dashboard preferences
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Dashboard
+      summary: Update current user dashboard preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDashboardPreferenceRequest'
+      responses:
+        '200': *id001
+  /procurement/purchase-requests:
+    get:
+      tags:
+      - Procurement
+      summary: List purchase requests
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Procurement
+      summary: Create purchase request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePurchaseRequestRequest'
+      responses:
+        '201': *id003
+  /procurement/purchase-requests/{id}:
+    get:
+      tags:
+      - Procurement
+      summary: Get purchase request detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Procurement
+      summary: Update purchase request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePurchaseRequestRequest'
+      responses:
+        '200': *id001
+  /procurement/purchase-requests/{id}/submit:
+    patch:
+      tags:
+      - Procurement
+      summary: Submit purchase request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /procurement/purchase-requests/{id}/cancel:
+    patch:
+      tags:
+      - Procurement
+      summary: Cancel purchase request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /procurement/purchase-requests/{id}/order:
+    patch:
+      tags:
+      - Procurement
+      summary: Order purchase request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /procurement/purchase-requests/{id}/close:
+    patch:
+      tags:
+      - Procurement
+      summary: Close purchase request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /procurement/purchase-requests/{id}/receipts:
+    post:
+      tags:
+      - Procurement
+      summary: Create purchase receipt from purchase request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePurchaseReceiptRequest'
+      responses:
+        '201': *id003
+  /procurement/receipts:
+    get:
+      tags:
+      - Procurement
+      summary: List purchase receipts
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /procurement/receipts/{id}:
+    get:
+      tags:
+      - Procurement
+      summary: Get purchase receipt detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Procurement
+      summary: Update purchase receipt
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePurchaseReceiptRequest'
+      responses:
+        '200': *id001
+  /procurement/receipts/{id}/submit:
+    patch:
+      tags:
+      - Procurement
+      summary: Submit purchase receipt
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /procurement/receipts/{id}/validate:
+    patch:
+      tags:
+      - Procurement
+      summary: Validate purchase receipt
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidatePurchaseReceiptRequest'
+      responses:
+        '200': *id001
+  /procurement/receipts/{id}/stock-in:
+    patch:
+      tags:
+      - Procurement
+      summary: Stock-In purchase receipt
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockInPurchaseReceiptRequest'
+      responses:
+        '200': *id001
+  /procurement/receipts/{id}/cancel:
+    patch:
+      tags:
+      - Procurement
+      summary: Cancel purchase receipt
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /procurement/reports:
+    get:
+      tags:
+      - Procurement
+      summary: Get procurement report helper data
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      responses:
+        '200': *id001
+  /complaints:
+    get:
+      tags:
+      - Complaints
+      summary: List complaints
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Complaints
+      summary: Create complaint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateComplaintRequest'
+      responses:
+        '201': *id003
+  /complaints/{id}:
+    get:
+      tags:
+      - Complaints
+      summary: Get complaint detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Complaints
+      summary: Update complaint
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateComplaintRequest'
+      responses:
+        '200': *id001
+  /complaints/{id}/assign:
+    patch:
+      tags:
+      - Complaints
+      summary: Assign complaint
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignComplaintRequest'
+      responses:
+        '200': *id001
+  /complaints/{id}/resolve:
+    patch:
+      tags:
+      - Complaints
+      summary: Resolve complaint
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveComplaintRequest'
+      responses:
+        '200': *id001
+  /complaints/{id}/close:
+    patch:
+      tags:
+      - Complaints
+      summary: Close complaint
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseComplaintRequest'
+      responses:
+        '200': *id001
+  /complaints/{id}/reopen:
+    patch:
+      tags:
+      - Complaints
+      summary: Reopen complaint
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /complaints/{id}/cancel:
+    patch:
+      tags:
+      - Complaints
+      summary: Cancel complaint
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /complaints/{id}/follow-ups:
+    get:
+      tags:
+      - Complaints
+      summary: List complaint follow-ups
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Complaints
+      summary: Add complaint follow-up
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateComplaintFollowUpRequest'
+      responses:
+        '201': *id003
+  /complaints/{id}/history:
+    get:
+      tags:
+      - Complaints
+      summary: List complaint status history
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+  /complaints/summary:
+    get:
+      tags:
+      - Complaints
+      summary: Get complaint summary
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      responses:
+        '200': *id001
+  /complaints/sla-overdue:
+    get:
+      tags:
+      - Complaints
+      summary: List SLA overdue complaints
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200': *id002
+  /void-refunds:
+    get:
+      tags:
+      - Void Refund
+      summary: List void/refund references
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Void Refund
+      summary: Create void/refund reference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVoidRefundRequest'
+      responses:
+        '201': *id003
+  /void-refunds/{id}:
+    get:
+      tags:
+      - Void Refund
+      summary: Get void/refund reference detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Void Refund
+      summary: Update void/refund reference
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVoidRefundRequest'
+      responses:
+        '200': *id001
+  /void-refunds/{id}/submit:
+    patch:
+      tags:
+      - Void Refund
+      summary: Submit void/refund reference
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /void-refunds/{id}/review:
+    patch:
+      tags:
+      - Void Refund
+      summary: Review void/refund reference
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewVoidRefundRequest'
+      responses:
+        '200': *id001
+  /void-refunds/{id}/approve:
+    patch:
+      tags:
+      - Void Refund
+      summary: Approve void/refund reference
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /void-refunds/{id}/reject:
+    patch:
+      tags:
+      - Void Refund
+      summary: Reject void/refund reference
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /void-refunds/{id}/flag:
+    patch:
+      tags:
+      - Void Refund
+      summary: Flag void/refund reference
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FlagVoidRefundRequest'
+      responses:
+        '200': *id001
+  /void-refunds/{id}/close:
+    patch:
+      tags:
+      - Void Refund
+      summary: Close void/refund reference
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseVoidRefundRequest'
+      responses:
+        '200': *id001
+  /void-refunds/{id}/cancel:
+    patch:
+      tags:
+      - Void Refund
+      summary: Cancel void/refund reference
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelVoidRefundRequest'
+      responses:
+        '200': *id001
+  /void-refunds/{id}/reviews:
+    get:
+      tags:
+      - Void Refund
+      summary: List void/refund reviews
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Void Refund
+      summary: Add void/refund review note
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVoidRefundReviewNoteRequest'
+      responses:
+        '201': *id003
+  /void-refunds/{id}/flags:
+    get:
+      tags:
+      - Void Refund
+      summary: List void/refund flags
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+  /void-refunds/summary:
+    get:
+      tags:
+      - Void Refund
+      summary: Get void/refund summary
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      responses:
+        '200': *id001
+  /void-refunds/anomalies:
+    get:
+      tags:
+      - Void Refund
+      summary: List void/refund anomaly candidates
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200': *id002
+  /corrections:
+    get:
+      tags:
+      - Corrections
+      summary: List correction requests
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Corrections
+      summary: Create correction request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCorrectionRequest'
+      responses:
+        '201': *id003
+  /corrections/{id}:
+    get:
+      tags:
+      - Corrections
+      summary: Get correction request detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Corrections
+      summary: Update correction request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCorrectionRequest'
+      responses:
+        '200': *id001
+  /corrections/{id}/submit:
+    patch:
+      tags:
+      - Corrections
+      summary: Submit correction request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /corrections/{id}/review:
+    patch:
+      tags:
+      - Corrections
+      summary: Review correction request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewCorrectionRequest'
+      responses:
+        '200': *id001
+  /corrections/{id}/approve:
+    patch:
+      tags:
+      - Corrections
+      summary: Approve correction request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNotesRequest'
+      responses:
+        '200': *id001
+  /corrections/{id}/reject:
+    patch:
+      tags:
+      - Corrections
+      summary: Reject correction request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /corrections/{id}/apply:
+    patch:
+      tags:
+      - Corrections
+      summary: Apply correction request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyCorrectionRequest'
+      responses:
+        '200': *id001
+  /corrections/{id}/cancel:
+    patch:
+      tags:
+      - Corrections
+      summary: Cancel correction request
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /corrections/{id}/history:
+    get:
+      tags:
+      - Corrections
+      summary: List correction history
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id002
+  /corrections/summary:
+    get:
+      tags:
+      - Corrections
+      summary: Get correction summary
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      responses:
+        '200': *id001
+  /corrections/pending-apply:
+    get:
+      tags:
+      - Corrections
+      summary: List approved but unapplied corrections
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /automation/workflows:
+    get:
+      tags:
+      - Automation
+      summary: List automation workflows
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Automation
+      summary: Create automation workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAutomationWorkflowRequest'
+      responses:
+        '201': *id003
+  /automation/workflows/{id}:
+    get:
+      tags:
+      - Automation
+      summary: Get automation workflow detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Automation
+      summary: Update automation workflow
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAutomationWorkflowRequest'
+      responses:
+        '200': *id001
+  /automation/workflows/{id}/activate:
+    patch:
+      tags:
+      - Automation
+      summary: Activate automation workflow
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /automation/workflows/{id}/pause:
+    patch:
+      tags:
+      - Automation
+      summary: Pause automation workflow
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /automation/workflows/{id}/test:
+    patch:
+      tags:
+      - Automation
+      summary: Test automation workflow
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestAutomationWorkflowRequest'
+      responses:
+        '200': *id001
+  /automation/logs:
+    get:
+      tags:
+      - Automation
+      summary: List automation logs
+      parameters:
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /automation/logs/{id}:
+    get:
+      tags:
+      - Automation
+      summary: Get automation log detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+  /automation/webhook-events:
+    post:
+      tags:
+      - Automation
+      summary: Receive automation webhook event
+      security: []
+      parameters:
+      - name: X-Automation-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationWebhookEventRequest'
+      responses:
+        '200': *id001
+    get:
+      tags:
+      - Automation
+      summary: List automation webhook events
+      parameters:
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /automation/webhook-events/{id}/reprocess:
+    patch:
+      tags:
+      - Automation
+      summary: Reprocess automation webhook event
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /automation/queue:
+    get:
+      tags:
+      - Automation
+      summary: List automation notification queue
+      parameters:
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /automation/queue/{id}/retry:
+    patch:
+      tags:
+      - Automation
+      summary: Retry queue item
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /automation/queue/{id}/cancel:
+    patch:
+      tags:
+      - Automation
+      summary: Cancel queue item
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /automation/notifications:
+    get:
+      tags:
+      - Automation
+      summary: List notification history
+      responses:
+        '200': *id002
+  /automation/notifications/send:
+    post:
+      tags:
+      - Automation
+      summary: Send notification request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendNotificationRequest'
+      responses:
+        '201': *id003
+  /automation/notifications/send-test:
+    post:
+      tags:
+      - Automation
+      summary: Send test notification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendTestNotificationRequest'
+      responses:
+        '201': *id003
+  /automation/notification-templates:
+    get:
+      tags:
+      - Automation
+      summary: List notification templates
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Automation
+      summary: Create notification template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNotificationTemplateRequest'
+      responses:
+        '201': *id003
+  /automation/notification-templates/{id}:
+    patch:
+      tags:
+      - Automation
+      summary: Update notification template
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNotificationTemplateRequest'
+      responses:
+        '200': *id001
+  /automation/health:
+    get:
+      tags:
+      - Automation
+      summary: Get automation health summary
+      responses:
+        '200': *id001
+  /automation/failures:
+    get:
+      tags:
+      - Automation
+      summary: List automation failures
+      parameters:
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /integrations:
+    get:
+      tags:
+      - Integrations
+      summary: List integrations
+      parameters:
+      - $ref: '#/components/parameters/BrandIdParam'
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Integrations
+      summary: Create integration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIntegrationRequest'
+      responses:
+        '201': *id003
+  /integrations/{id}:
+    get:
+      tags:
+      - Integrations
+      summary: Get integration detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - Integrations
+      summary: Update integration
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateIntegrationRequest'
+      responses:
+        '200': *id001
+  /integrations/{id}/activate:
+    patch:
+      tags:
+      - Integrations
+      summary: Activate integration
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /integrations/{id}/pause:
+    patch:
+      tags:
+      - Integrations
+      summary: Pause integration
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /integrations/{id}/test-connection:
+    patch:
+      tags:
+      - Integrations
+      summary: Test-Connection integration
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestIntegrationConnectionRequest'
+      responses:
+        '200': *id001
+  /integrations/{id}/sync:
+    post:
+      tags:
+      - Integrations
+      summary: Start integration sync job
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartSyncRequest'
+      responses:
+        '201': *id003
+  /integrations/sync-jobs:
+    get:
+      tags:
+      - Integrations
+      summary: List integration sync jobs
+      parameters:
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /integrations/sync-jobs/{id}/retry:
+    patch:
+      tags:
+      - Integrations
+      summary: Retry sync job
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrySyncJobRequest'
+      responses:
+        '200': *id001
+  /integrations/logs:
+    get:
+      tags:
+      - Integrations
+      summary: List integration logs
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /integrations/pawoon/status:
+    get:
+      tags:
+      - Integrations
+      summary: Get Pawoon integration status
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      responses:
+        '200': *id001
+  /integrations/pawoon/import:
+    post:
+      tags:
+      - Integrations
+      summary: Import Pawoon export file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PawoonImportRequest'
+      responses:
+        '201': *id003
+  /integrations/pawoon/sync:
+    post:
+      tags:
+      - Integrations
+      summary: Start Pawoon sync
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PawoonSyncRequest'
+      responses:
+        '201': *id003
+  /integrations/pawoon/transactions:
+    get:
+      tags:
+      - Integrations
+      summary: List Pawoon transaction references
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/DateFromParam'
+      - $ref: '#/components/parameters/DateToParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+  /integrations/pawoon/mappings/items:
+    get:
+      tags:
+      - Integrations
+      summary: List Pawoon item mappings
+      parameters:
+      - $ref: '#/components/parameters/OutletIdParam'
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Integrations
+      summary: Create Pawoon item mapping
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePawoonItemMappingRequest'
+      responses:
+        '201': *id003
+  /integrations/imports:
+    get:
+      tags:
+      - Integrations
+      summary: List generic import jobs
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - Integrations
+      summary: Create generic import job
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateImportJobRequest'
+      responses:
+        '201': *id003
+  /integrations/imports/{id}/validate:
+    patch:
+      tags:
+      - Integrations
+      summary: Validate import job
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateImportJobRequest'
+      responses:
+        '200': *id001
+  /integrations/imports/{id}/apply:
+    patch:
+      tags:
+      - Integrations
+      summary: Apply validated import job
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyImportJobRequest'
+      responses:
+        '200': *id001
+  /system/settings:
+    get:
+      tags:
+      - System
+      summary: List system settings
+      parameters:
+      - $ref: '#/components/parameters/SearchParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200': *id002
+    post:
+      tags:
+      - System
+      summary: Create system setting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSystemSettingRequest'
+      responses:
+        '201': *id003
+  /system/settings/{key}:
+    get:
+      tags:
+      - System
+      summary: Get system setting detail
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - System
+      summary: Update system setting
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSystemSettingRequest'
+      responses:
+        '200': *id001
+  /system/settings/{key}/reset:
+    patch:
+      tags:
+      - System
+      summary: Reset system setting to default
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200': *id001
+  /system/feature-flags:
+    get:
+      tags:
+      - System
+      summary: List feature flags
+      responses:
+        '200': *id002
+  /system/feature-flags/{id}:
+    get:
+      tags:
+      - System
+      summary: Get feature flag detail
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - System
+      summary: Update feature flag
+      parameters:
+      - $ref: '#/components/parameters/PathIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFeatureFlagRequest'
+      responses:
+        '200': *id001
+  /system/modules:
+    get:
+      tags:
+      - System
+      summary: List system modules
+      responses:
+        '200': *id002
+  /system/status:
+    get:
+      tags:
+      - System
+      summary: Get system status
+      responses:
+        '200': *id001
+  /system/health:
+    get:
+      tags:
+      - System
+      summary: Get system health
+      responses:
+        '200': *id001
+  /system/version:
+    get:
+      tags:
+      - System
+      summary: Get system version
+      security: []
+      responses:
+        '200': *id001
+  /system/cache/refresh:
+    post:
+      tags:
+      - System
+      summary: Refresh system cache
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemCacheRequest'
+      responses:
+        '200': *id001
+  /system/cache/clear:
+    post:
+      tags:
+      - System
+      summary: Clear system cache
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemCacheRequest'
+      responses:
+        '200': *id001
+  /system/maintenance:
+    get:
+      tags:
+      - System
+      summary: Get maintenance status
+      responses:
+        '200': *id001
+    patch:
+      tags:
+      - System
+      summary: Update maintenance mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMaintenanceRequest'
+      responses:
+        '200': *id001

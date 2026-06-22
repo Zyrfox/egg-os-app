@@ -1,0 +1,15 @@
+name               = "egg-os-api"
+main               = "src/index.ts"
+compatibility_date = "2024-12-18"
+compatibility_flags = ["nodejs_compat"]
+
+[dev]
+port = 8787
+
+# ---------------------------------------------------------------------------
+# Hyperdrive — runtime binding (hanya aktif saat deploy ke Workers)
+# Uncomment dan isi `id` saat Hyperdrive config sudah dibuat di CF Dashboard
+# ---------------------------------------------------------------------------
+# [[hyperdrive]]
+# binding = "HYPERDRIVE"
+# id      = "PLACEHOLDER"

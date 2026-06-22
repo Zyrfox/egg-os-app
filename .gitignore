@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+.output/
+
+# Cloudflare Workers
+.wrangler/
+.dev.vars
+
+# environment variables — never commit
+.env
+.env.local
+.env.*.local
+*.env
+
+# drizzle migrations (generated)
+migrations/
+
+# editor
+.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
