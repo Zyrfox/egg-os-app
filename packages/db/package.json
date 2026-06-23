@@ -5,7 +5,8 @@
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed:core": "tsx seeds/01-core.ts"
+    "db:seed:core": "tsx seeds/01-core.ts",
+    "db:seed:rbac": "tsx seeds/02-rbac.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.0",

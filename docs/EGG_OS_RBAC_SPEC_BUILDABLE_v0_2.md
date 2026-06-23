@@ -147,6 +147,8 @@ Algoritma (urut, jangan diubah):
    DENY MENANG — walau ada grant dari role maupun override.
 5. Return { roles, grants (post-deny), rawScopes }.
 ```
+**Catatan: Deny Menyeluruh (fail-closed).** DENY override berlaku MENYELURUH terhadap grant yang scope-nya overlap. Jika ada deny pada scope yang lebih sempit (mis. outlet X di bawah brand B) terhadap grant brand B, maka SELURUH grant brand B untuk permission itu dibuang — bukan hanya outlet X. Ini keputusan sadar: deny bersifat agresif (fail-closed) demi keamanan. Untuk deny granular, pasang deny pada level scope yang sama dengan grant.
+
 > Catatan: hasil ini boleh di-cache **per-request** (resolve sekali di awal request, simpan di `ctx`). JANGAN cache lintas-request tanpa invalidasi — perubahan role harus langsung berlaku (Global Contract §4: authz dicek dari DB).
 
 ### 3.2 `scopeCovers(grant, target, orgTree): boolean`

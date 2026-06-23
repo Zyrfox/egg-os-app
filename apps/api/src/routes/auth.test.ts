@@ -1,12 +1,23 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { sign } from 'hono/jwt';
 import app from '../index';
-import { users, refreshTokens, passwordTokens, authEvents } from '@egg-os/db';
+import {
+  companies,
+  permissions,
+  rolePermissions,
+  roles,
+  userRoles,
+  users,
+  refreshTokens,
+  passwordTokens,
+  authEvents,
+} from '@egg-os/db';
 import { hashPassword, generateToken, hashToken } from '../lib/crypto';
 import { AUTH } from '../lib/constants';
+import { verifyAccessToken } from '../lib/jwt';
 
 // ── Test env ─────────────────────────────────────────────────────────────────
 
@@ -20,6 +31,9 @@ const TEST_ENV = {
 // ── Fixtures §8 ──────────────────────────────────────────────────────────────
 
 const COMPANY_ID = '11111111-1111-1111-1111-111111111111';
+const AUTH_RBAC_ROLE_ID = '70000000-0000-4000-8000-000000000001';
+const authRbacPermissionCodes = ['inventory.read', 'reports.read'];
+const authRbacPermissionIds = new Map<string, string>();
 
 const FIXTURES = {
   owner: {
@@ -107,14 +121,82 @@ async function makeExpiredToken(userId: string, companyId: string) {
   );
 }
 
+async function insertPermissionCatalog() {
+  await db
+    .insert(permissions)
+    .values(
+      authRbacPermissionCodes.map((code) => {
+        const [module, action] = code.split('.');
+        return {
+          code,
+          module,
+          action,
+          description: `AUTH RBAC integration test permission ${code}`,
+        };
+      })
+    )
+    .onConflictDoNothing();
+
+  const rows = await db
+    .select({ id: permissions.id, code: permissions.code })
+    .from(permissions)
+    .where(inArray(permissions.code, authRbacPermissionCodes));
+
+  for (const row of rows) {
+    authRbacPermissionIds.set(row.code, row.id);
+  }
+}
+
+async function seedRbacForOwner() {
+  await insertPermissionCatalog();
+
+  await db.insert(roles).values({
+    id: AUTH_RBAC_ROLE_ID,
+    companyId: COMPANY_ID,
+    code: 'ERP_OWNER_AUTH',
+    name: 'ERP Owner Auth Test',
+    defaultScopeType: 'company',
+    isSystem: false,
+  });
+
+  await db.insert(rolePermissions).values(
+    authRbacPermissionCodes.map((code) => ({
+      roleId: AUTH_RBAC_ROLE_ID,
+      permissionId: authRbacPermissionIds.get(code)!,
+      companyId: COMPANY_ID,
+    }))
+  );
+
+  await db.insert(userRoles).values({
+    userId: OWNER_ID,
+    roleId: AUTH_RBAC_ROLE_ID,
+    companyId: COMPANY_ID,
+    scopeType: 'company',
+    scopeId: null,
+    grantedBy: OWNER_ID,
+  });
+}
+
 // ── Seed & Teardown ───────────────────────────────────────────────────────────
 
 beforeAll(async () => {
   // Clean up any leftover test data
+  await sql`DELETE FROM access_overrides WHERE company_id = ${COMPANY_ID}`;
+  await sql`DELETE FROM user_roles WHERE company_id = ${COMPANY_ID}`;
+  await sql`DELETE FROM role_permissions WHERE company_id = ${COMPANY_ID}`;
+  await sql`DELETE FROM roles WHERE company_id = ${COMPANY_ID}`;
   await sql`DELETE FROM auth_events   WHERE company_id = ${COMPANY_ID}`;
   await sql`DELETE FROM password_tokens WHERE company_id = ${COMPANY_ID}`;
   await sql`DELETE FROM refresh_tokens  WHERE company_id = ${COMPANY_ID}`;
   await sql`DELETE FROM users           WHERE company_id = ${COMPANY_ID}`;
+  await sql`DELETE FROM companies       WHERE id = ${COMPANY_ID}`;
+
+  await db.insert(companies).values({
+    id: COMPANY_ID,
+    companyCode: 'AUTH-RBAC',
+    companyName: 'AUTH RBAC Integration Company',
+    status: 'active',
+  });
 
   // Insert owner
   const [owner] = await db.insert(users).values({
@@ -158,13 +240,20 @@ beforeAll(async () => {
     type: 'set_password',
     expiresAt: new Date(Date.now() + AUTH.SET_PASSWORD_TTL_SEC * 1000),
   });
+
+  await seedRbacForOwner();
 });
 
 afterAll(async () => {
+  await sql`DELETE FROM access_overrides WHERE company_id = ${COMPANY_ID}`;
+  await sql`DELETE FROM user_roles WHERE company_id = ${COMPANY_ID}`;
+  await sql`DELETE FROM role_permissions WHERE company_id = ${COMPANY_ID}`;
+  await sql`DELETE FROM roles WHERE company_id = ${COMPANY_ID}`;
   await sql`DELETE FROM auth_events    WHERE company_id = ${COMPANY_ID}`;
   await sql`DELETE FROM password_tokens WHERE company_id = ${COMPANY_ID}`;
   await sql`DELETE FROM refresh_tokens  WHERE company_id = ${COMPANY_ID}`;
   await sql`DELETE FROM users           WHERE company_id = ${COMPANY_ID}`;
+  await sql`DELETE FROM companies       WHERE id = ${COMPANY_ID}`;
   await sql.end();
 });
 
@@ -592,5 +681,50 @@ describe('TENANCY', () => {
     });
     expect(status).toBe(401);
     expect(body.error.code).toBe('ERR_UNAUTHENTICATED');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RBAC INTEGRATION (I1-I2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('RBAC INTEGRATION', () => {
+  it('I1 — /auth/me/permissions returns resolved roles, scopes, and permissions', async () => {
+    const token = await makeAccessToken(OWNER_ID, COMPANY_ID);
+
+    const { status, body } = await req('GET', '/api/v1/auth/me/permissions', undefined, {
+      Authorization: `Bearer ${token}`,
+    });
+
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data.roles).toEqual(['ERP_OWNER_AUTH']);
+    expect(body.data.scopes).toEqual([{ scope_type: 'company', scope_id: null }]);
+    expect(body.data.permissions).toEqual(['inventory.read', 'reports.read']);
+  });
+
+  it('I2 — login and refresh access tokens include roles/scopes hints, not full permissions', async () => {
+    const login = await req('POST', '/api/v1/auth/login', {
+      email: FIXTURES.owner.email,
+      password: FIXTURES.owner.password,
+    });
+    expect(login.status).toBe(200);
+
+    const loginPayload = await verifyAccessToken(login.body.data.access_token, TEST_JWT_SECRET);
+    expect(loginPayload.roles).toEqual(['ERP_OWNER_AUTH']);
+    expect(loginPayload.scopes).toEqual([{ scope_type: 'company', scope_id: null }]);
+    expect((loginPayload as unknown as { permissions?: string[] }).permissions).toBeUndefined();
+
+    const refreshed = await req('POST', '/api/v1/auth/refresh', {
+      refresh_token: login.body.data.refresh_token,
+    });
+    expect(refreshed.status).toBe(200);
+
+    const refreshPayload = await verifyAccessToken(refreshed.body.data.access_token, TEST_JWT_SECRET);
+    expect(refreshPayload.roles).toEqual(['ERP_OWNER_AUTH']);
+    expect(refreshPayload.scopes).toEqual([{ scope_type: 'company', scope_id: null }]);
+    expect((refreshPayload as unknown as { permissions?: string[] }).permissions).toBeUndefined();
+
+    await sql`DELETE FROM refresh_tokens WHERE user_id = ${OWNER_ID}`;
   });
 });

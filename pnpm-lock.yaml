@@ -20,6 +20,9 @@ importers:
       '@egg-os/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@egg-os/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       '@noble/hashes':
         specifier: ^1.6.0
         version: 1.8.0

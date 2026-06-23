@@ -5,9 +5,7 @@ export type Env = {
 
 export type Scope = {
   scope_type: 'global' | 'company' | 'brand' | 'outlet' | 'department' | 'own' | 'assigned' | 'audit_view';
-  outlet_id?: string;
-  brand_id?: string;
-  department_id?: string;
+  scope_id: string | null;
 };
 
 export type AuthCtx = {

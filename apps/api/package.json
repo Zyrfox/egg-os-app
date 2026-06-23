@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@egg-os/db": "workspace:*",
+    "@egg-os/validation": "workspace:*",
     "@noble/hashes": "^1.6.0",
     "drizzle-orm": "^0.38.0",
     "hono": "^4.6.0",

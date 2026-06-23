@@ -8,6 +8,7 @@ import { signAccessToken } from '../lib/jwt';
 import { errResponse, okResponse, ERR } from '../lib/errors';
 import { AUTH } from '../lib/constants';
 import { authMiddleware, firstLoginGuard } from '../middleware/auth';
+import { resolveUserPermissions } from '../modules/rbac/resolve';
 import type { Env, AuthCtx } from '../types';
 
 // ── Zod schemas (§5) ────────────────────────────────────────────────────────
@@ -112,12 +113,17 @@ async function issueTokenPair(
     })
     .returning({ id: refreshTokens.id });
 
+  const access = await resolveUserPermissions(db, user.id, user.companyId);
+
   const accessToken = await signAccessToken(
     {
       sub: user.id,
       company_id: user.companyId,
-      roles: [],   // RBAC module populates; AUTH emits empty hint per §4
-      scopes: [],
+      roles: access.roles,
+      scopes: access.rawScopes.map((scope) => ({
+        scope_type: scope.scopeType,
+        scope_id: scope.scopeId,
+      })),
       first_login_required: user.firstLoginRequired,
     },
     jwtSecret
@@ -354,11 +360,17 @@ auth.get('/me', authMiddleware, firstLoginGuard, async (c) => {
 // ── 5.5 GET /me/permissions ───────────────────────────────────────────────────
 auth.get('/me/permissions', authMiddleware, firstLoginGuard, async (c) => {
   const authCtx = c.get('auth');
+  const db = createDb(c.env.DATABASE_URL);
+  const access = await resolveUserPermissions(db, authCtx.userId, authCtx.companyId);
+
   return c.json(
     okResponse({
-      roles: authCtx.roles,
-      scopes: authCtx.scopes,
-      permissions: [] as string[], // RBAC module fills this; AUTH passthrough
+      roles: access.roles,
+      scopes: access.rawScopes.map((scope) => ({
+        scope_type: scope.scopeType,
+        scope_id: scope.scopeId,
+      })),
+      permissions: Array.from(new Set(access.grants.map((grant) => grant.permission))).sort(),
     }),
     200
   );

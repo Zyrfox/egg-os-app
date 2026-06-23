@@ -6,6 +6,7 @@
     "db:generate": "pnpm --filter @egg-os/db db:generate",
     "db:migrate": "pnpm --filter @egg-os/db db:migrate",
     "db:seed:core": "pnpm --filter @egg-os/db db:seed:core",
+    "db:seed:rbac": "pnpm --filter @egg-os/db db:seed:rbac",
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {

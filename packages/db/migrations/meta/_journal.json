@@ -15,6 +15,20 @@
       "when": 1782117033721,
       "tag": "0001_old_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782182143510,
+      "tag": "0002_broken_random",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782183183925,
+      "tag": "0003_same_princess_powerful",
+      "breakpoints": true
     }
   ]
 }

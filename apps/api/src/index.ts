@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { errResponse, ERR } from './lib/errors'
 import authRouter from './routes/auth'
 import coreRouter from './modules/core/routes'
+import rbacRouter from './modules/rbac/routes'
 import type { Env } from './types'
 
 const app = new Hono<{ Bindings: Env }>()
@@ -18,5 +19,6 @@ app.get('/health', (c) =>
 
 app.route('/api/v1', coreRouter)
 app.route('/api/v1/auth', authRouter)
+app.route('/api/v1/rbac', rbacRouter)
 
 export default app
