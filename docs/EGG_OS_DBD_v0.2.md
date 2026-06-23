@@ -50,7 +50,7 @@ Dokumen ini disusun sebagai pegangan teknis internal untuk perancangan dan pemba
 | Owner / Custodian | Ilham Juniansyah S. |
 | Business Context | Easy Going Group multi-outlet operation |
 | Pilot Scope | BTMK + BTMF |
-| Future Scope | TSF, Healthopia, EGC, ENC, FRC, SaaS external businesses |
+| Future Scope | TSF, Healthopia, EGC, ENC, FRC, BHG, SaaS external businesses |
 | Generated Date | 2026-06-11 |
 
 # 1. Database Overview
@@ -107,7 +107,7 @@ companies -> brands -> outlets -> operational modules. users -> roles/permission
 | Table | Core Columns / Field Groups | Key Notes / Rules |
 | --- | --- | --- |
 | companies | id, company_code, company_name, legal_name, status, metadata, created_by, created_at, updated_at, deleted_at | Root tenant/company. Seed: EGG - Easy Going Group. Unique company_code. |
-| brands | id, company_id, brand_code, brand_name, brand_type, status, metadata, timestamps | Brand/unit bisnis. Seed: BTMK, BTMF, TSF, HCP, EGC, ENC, FRC. |
+| brands | id, company_id, brand_code, brand_name, brand_type, status, is_active, metadata, timestamps | Brand/business unit. brand_type enum: fnb, tourism, retail, construction, rental, automotive, healthcare. Seed: BTMK (fnb), BTMF (fnb), TSF (tourism / mini zoo), ENC (retail), EGC (construction), FRC (rental), BHG (automotive), HCP (healthcare, is_active=false — rollout fase akhir). |
 | outlets | id, company_id, brand_id, outlet_code, outlet_name, outlet_type, address, timezone, opening_time, closing_time, status, timestamps | Outlet fisik/operasional. MVP seed: BTMK + BTMF. |
 | departments | id, company_id, department_code, department_name, department_type, status, timestamps | Divisi/fungsi kerja. Seed: INV, FIN, OPS, HR, COM, MED, AUD, KTN, CSR, TECH. |
 
@@ -365,7 +365,7 @@ companies -> brands -> outlets -> operational modules. users -> roles/permission
 | Seed Area | Values |
 | --- | --- |
 | Company | EGG - Easy Going Group |
-| Brands | BTMK, BTMF, TSF, HCP, EGC, ENC, FRC |
+| Brands | BTMK, BTMF, TSF, ENC, EGC, FRC, BHG, HCP (HCP is_active=false sampai rollout fase akhir) |
 | MVP Outlets | BTMK, BTMF |
 | Departments | INV, FIN, OPS, HR, COM, MED, AUD, KTN, CSR, TECH |
 | Roles | SUPER_ADMIN, ERP_OWNER, DIREKSI, MANAGER_INVENTORY, MANAGER_FINANCE, MANAGER_OPS_HR, MANAGER_COMMERCIAL, SPV_OUTLET, STAFF, FREELANCE, AUDITOR |
