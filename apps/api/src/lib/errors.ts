@@ -21,6 +21,7 @@ export const ERR = {
   UNAUTHENTICATED:          { code: 'ERR_UNAUTHENTICATED',          message: 'Sesi tidak valid / token kedaluwarsa',          http: 401 },
   FORBIDDEN:                { code: 'ERR_FORBIDDEN',                message: 'Akses ditolak',                                 http: 403 },
   NOT_FOUND:                { code: 'ERR_NOT_FOUND',                message: 'Data tidak ditemukan',                          http: 404 },
+  DUPLICATE:                { code: 'ERR_DUPLICATE',                message: 'Data duplikat',                                  http: 409 },
   CONFLICT:                 { code: 'ERR_CONFLICT',                 message: 'Data bentrok / duplikat',                       http: 409 },
   INTERNAL:                 { code: 'ERR_INTERNAL',                 message: 'Terjadi kesalahan sistem',                      http: 500 },
   INVALID_CREDENTIALS:      { code: 'ERR_INVALID_CREDENTIALS',      message: 'Email atau password tidak sesuai',              http: 401 },

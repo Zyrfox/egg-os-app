@@ -47,7 +47,8 @@ export const RBAC_PERMISSION_CATALOG: PermissionSeed[] = [
   { code: 'users.read', description: 'Read users' },
   { code: 'users.create', description: 'Create users' },
   { code: 'users.update', description: 'Update users' },
-  { code: 'users.deactivate', description: 'Deactivate users' },
+  { code: 'users.suspend', description: 'Suspend users' },
+  { code: 'users.archive', description: 'Archive users' },
   { code: 'inventory.read', description: 'Read inventory' },
   { code: 'inventory.stock_in', description: 'Create stock-in entries' },
   { code: 'inventory.stock_out', description: 'Create stock-out entries' },
@@ -267,6 +268,18 @@ async function syncRolePermissions(
     .onConflictDoNothing()
 }
 
+async function deleteDeprecatedPermissions(db: SeedDb) {
+  await db.execute(drizzleSql`
+    delete from permissions p
+    where p.code = 'users.deactivate'
+      and not exists (
+        select 1
+        from role_permissions rp
+        where rp.permission_id = p.id
+      )
+  `)
+}
+
 export async function seedRbac(db: SeedDb) {
   const company = await getEggCompany(db)
   const permissionIds = await upsertPermissionCatalog(db)
@@ -284,6 +297,8 @@ export async function seedRbac(db: SeedDb) {
 
     await syncRolePermissions(db, company.id, role.id, desiredPermissionIds)
   }
+
+  await deleteDeprecatedPermissions(db)
 
   return getRbacSeedCounts(db, company.id)
 }
