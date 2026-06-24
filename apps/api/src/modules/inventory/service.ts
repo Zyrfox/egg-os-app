@@ -518,6 +518,8 @@ export async function createOpname(db: Db, ctx: InventoryServiceContext, input: 
 export async function getBalances(db: Db, ctx: InventoryServiceContext, query: BalanceQuery = {}) {
   const page = pageOf(query)
   const pageSize = pageSizeOf(query)
+  if (query.outletId) await getOutlet(db, ctx.companyId, query.outletId)
+
   const visibleOutletIds = await visibleOutletIdsForPermission(db, ctx, 'inventory.read')
 
   if (query.outletId && !visibleOutletIds.includes(query.outletId)) {
@@ -574,6 +576,8 @@ export async function getBalances(db: Db, ctx: InventoryServiceContext, query: B
 export async function getMovements(db: Db, ctx: InventoryServiceContext, query: MovementQuery = {}) {
   const page = pageOf(query)
   const pageSize = pageSizeOf(query)
+  if (query.outletId) await getOutlet(db, ctx.companyId, query.outletId)
+
   const visibleOutletIds = await visibleOutletIdsForPermission(db, ctx, 'inventory.read')
 
   if (query.outletId && !visibleOutletIds.includes(query.outletId)) {

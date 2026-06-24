@@ -39,6 +39,7 @@ const OTHER_BRAND_ID = '94000000-0000-4000-8000-000000000004'
 const OUTLET_A_ID = '94000000-0000-4000-8000-000000000005'
 const OUTLET_B_ID = '94000000-0000-4000-8000-000000000006'
 const OTHER_OUTLET_ID = '94000000-0000-4000-8000-000000000007'
+const MISSING_OUTLET_ID = '94000000-0000-4000-8000-000000000099'
 const ACTOR_USER_ID = '94000000-0000-4000-8000-000000000008'
 const OTHER_ACTOR_USER_ID = '94000000-0000-4000-8000-000000000009'
 
@@ -557,6 +558,15 @@ describe('INV-CORE service ledger logic', () => {
     })
   })
 
+  it('getBalances rejects cross-company outlet filter with 404', async () => {
+    await expect(
+      getBalances(db, ctx('inventory.read', OUTLET_A_ID), { outletId: OTHER_OUTLET_ID })
+    ).rejects.toMatchObject({
+      status: 404,
+      code: 'ERR_OUT_OF_SCOPE',
+    })
+  })
+
   it('getBalances returns empty result for row-level-only inventory access', async () => {
     await db.insert(stockBalances).values({
       companyId: COMPANY_ID,
@@ -628,6 +638,15 @@ describe('INV-CORE service ledger logic', () => {
   it('getMovements rejects outlet query outside visible scope with 404', async () => {
     await expect(
       getMovements(db, ctx('inventory.read', OUTLET_A_ID), { outletId: OUTLET_B_ID })
+    ).rejects.toMatchObject({
+      status: 404,
+      code: 'ERR_OUT_OF_SCOPE',
+    })
+  })
+
+  it('getMovements rejects missing outlet filter with 404', async () => {
+    await expect(
+      getMovements(db, ctx('inventory.read', OUTLET_A_ID), { outletId: MISSING_OUTLET_ID })
     ).rejects.toMatchObject({
       status: 404,
       code: 'ERR_OUT_OF_SCOPE',
