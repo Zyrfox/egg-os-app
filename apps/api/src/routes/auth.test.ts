@@ -18,6 +18,7 @@ import {
 import { hashPassword, generateToken, hashToken } from '../lib/crypto';
 import { AUTH } from '../lib/constants';
 import { verifyAccessToken } from '../lib/jwt';
+import type { TestResponseBody } from '../test/types';
 
 // ── Test env ─────────────────────────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ async function req(
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   };
   const res = await app.request(`http://localhost${path}`, init, TEST_ENV);
-  const json = await res.json();
+  const json = await res.json() as TestResponseBody;
   return { status: res.status, body: json };
 }
 
@@ -713,6 +714,7 @@ describe('RBAC INTEGRATION', () => {
     const loginPayload = await verifyAccessToken(login.body.data.access_token, TEST_JWT_SECRET);
     expect(loginPayload.roles).toEqual(['ERP_OWNER_AUTH']);
     expect(loginPayload.scopes).toEqual([{ scope_type: 'company', scope_id: null }]);
+    // JWT payload intentionally omits full permissions; this narrows only for the negative assertion.
     expect((loginPayload as unknown as { permissions?: string[] }).permissions).toBeUndefined();
 
     const refreshed = await req('POST', '/api/v1/auth/refresh', {
@@ -723,6 +725,7 @@ describe('RBAC INTEGRATION', () => {
     const refreshPayload = await verifyAccessToken(refreshed.body.data.access_token, TEST_JWT_SECRET);
     expect(refreshPayload.roles).toEqual(['ERP_OWNER_AUTH']);
     expect(refreshPayload.scopes).toEqual([{ scope_type: 'company', scope_id: null }]);
+    // JWT payload intentionally omits full permissions; this narrows only for the negative assertion.
     expect((refreshPayload as unknown as { permissions?: string[] }).permissions).toBeUndefined();
 
     await sql`DELETE FROM refresh_tokens WHERE user_id = ${OWNER_ID}`;

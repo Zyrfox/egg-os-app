@@ -16,6 +16,7 @@ import {
 } from '@egg-os/db'
 import app from '../../index'
 import { signAccessToken } from '../../lib/jwt'
+import type { TestResponseBody } from '../../test/types'
 import { resolveUserPermissions } from './resolve'
 
 const TEST_JWT_SECRET = 'dev-egg-os-jwt-secret-change-in-production-min32chars'
@@ -69,7 +70,7 @@ async function req(method: string, path: string, token?: string, body?: unknown)
     },
     TEST_ENV
   )
-  return { status: res.status, body: await res.json() }
+  return { status: res.status, body: await res.json() as TestResponseBody }
 }
 
 async function tokenFor(userId: string) {

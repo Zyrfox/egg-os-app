@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { StatusCode } from 'hono/utils/http-status'
+import type { Context } from 'hono'
 import { z } from '@egg-os/validation'
 import {
   AssignRoleReq,
@@ -33,6 +33,7 @@ const UuidParam = z.string().uuid()
 const companyTarget = () => ({ scopeType: 'company' as const, scopeId: null })
 
 const rbac = new Hono<{ Bindings: Env; Variables: RbacVariables }>()
+type RbacContext = Context<{ Bindings: Env; Variables: RbacVariables }>
 
 function formatZodErrors(err: z.ZodError) {
   return err.issues.map((issue) => ({
@@ -41,24 +42,24 @@ function formatZodErrors(err: z.ZodError) {
   }))
 }
 
-function validationResponse(c: Parameters<Parameters<typeof rbac.get>[1]>[0], err: z.ZodError) {
+function validationResponse(c: RbacContext, err: z.ZodError) {
   return c.json(errResponse(ERR.VALIDATION.code, ERR.VALIDATION.message, formatZodErrors(err)), 422)
 }
 
-function serviceErrorResponse(c: Parameters<Parameters<typeof rbac.get>[1]>[0], error: RbacServiceError) {
+function serviceErrorResponse(c: RbacContext, error: RbacServiceError) {
   return c.json(
     errResponse(error.code, error.message, error.details),
-    error.status as StatusCode
+    error.status
   )
 }
 
-function parseUuid(c: Parameters<Parameters<typeof rbac.get>[1]>[0], name: string) {
+function parseUuid(c: RbacContext, name: string) {
   const parsed = UuidParam.safeParse(c.req.param(name))
   if (!parsed.success) return { value: null, response: validationResponse(c, parsed.error) }
   return { value: parsed.data, response: null }
 }
 
-async function parseJson(c: Parameters<Parameters<typeof rbac.get>[1]>[0]) {
+async function parseJson(c: RbacContext) {
   return c.req.json().catch(() => null)
 }
 

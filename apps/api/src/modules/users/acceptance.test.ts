@@ -20,6 +20,7 @@ import { AUTH } from '../../lib/constants'
 import { generateToken, hashToken } from '../../lib/crypto'
 import { signAccessToken } from '../../lib/jwt'
 import { resolveUserPermissions } from '../rbac/resolve'
+import type { TestResponseBody } from '../../test/types'
 
 const TEST_JWT_SECRET = 'dev-egg-os-jwt-secret-change-in-production-min32chars'
 const TEST_ENV = {
@@ -75,7 +76,7 @@ let adminOutletToken = ''
 let noReadToken = ''
 let revokeAssignmentId = ''
 
-async function req(method: string, path: string, token?: string, body?: unknown): Promise<{ status: number; body: any }> {
+async function req(method: string, path: string, token?: string, body?: unknown): Promise<{ status: number; body: TestResponseBody }> {
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await app.request(
@@ -87,7 +88,7 @@ async function req(method: string, path: string, token?: string, body?: unknown)
     },
     TEST_ENV
   )
-  return { status: res.status, body: await res.json() }
+  return { status: res.status, body: await res.json() as TestResponseBody }
 }
 
 async function tokenFor(userId: string) {

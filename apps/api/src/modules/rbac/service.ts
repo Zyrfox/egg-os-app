@@ -13,6 +13,7 @@ import {
 } from '@egg-os/db'
 import { ERR } from '../../lib/errors'
 import type { Db } from '../../lib/db'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type {
   AssignRoleInput,
   CreateOverrideInput,
@@ -26,7 +27,7 @@ export type ErrorDetail = { field: string; issue: string }
 
 export class RbacServiceError extends Error {
   constructor(
-    public readonly status: number,
+    public readonly status: ContentfulStatusCode,
     public readonly code: string,
     message: string,
     public readonly details?: ErrorDetail[]
@@ -43,7 +44,7 @@ function notFound() {
   return new RbacServiceError(ERR.NOT_FOUND.http, ERR.NOT_FOUND.code, ERR.NOT_FOUND.message)
 }
 
-function forbidden(message = ERR.FORBIDDEN.message) {
+function forbidden(message: string = ERR.FORBIDDEN.message) {
   return new RbacServiceError(ERR.FORBIDDEN.http, ERR.FORBIDDEN.code, message)
 }
 

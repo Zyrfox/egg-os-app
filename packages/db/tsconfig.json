@@ -1,4 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src", "drizzle.config.ts"]
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src", "seeds", "drizzle.config.ts"]
 }

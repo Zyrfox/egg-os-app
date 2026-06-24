@@ -1,5 +1,4 @@
 import { Hono, type Context } from 'hono'
-import type { StatusCode } from 'hono/utils/http-status'
 import {
   AssignUserRoleReq,
   InviteUserReq,
@@ -47,7 +46,7 @@ function validationResponse(c: UsersContext, err: z.ZodError) {
 function serviceErrorResponse(c: UsersContext, error: UsersServiceError) {
   return c.json(
     errResponse(error.code, error.message, error.details),
-    error.status as StatusCode
+    error.status
   )
 }
 

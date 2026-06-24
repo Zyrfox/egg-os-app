@@ -17,6 +17,7 @@ import { AUTH } from '../../lib/constants'
 import type { Db } from '../../lib/db'
 import { generateToken, hashToken } from '../../lib/crypto'
 import { ERR } from '../../lib/errors'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AccessFilter } from '../rbac/middleware'
 import {
   assignUserRole,
@@ -53,7 +54,7 @@ type RoleAssignmentRow = {
 
 export class UsersServiceError extends Error {
   constructor(
-    public readonly status: number,
+    public readonly status: ContentfulStatusCode,
     public readonly code: string,
     message: string,
     public readonly details?: ErrorDetail[]
@@ -398,6 +399,7 @@ export async function inviteUser(db: Db, ctx: UsersServiceContext, input: Invite
 
   try {
     return await db.transaction(async (tx) => {
+      // Drizzle's transaction type is structurally compatible with Db but not exported as the same alias.
       const txDb = tx as unknown as Db
       const existing = await txDb
         .select({ id: users.id })
@@ -515,6 +517,7 @@ export async function reactivateUser(db: Db, ctx: UsersServiceContext, userId: s
 
 export async function archiveUser(db: Db, ctx: UsersServiceContext, userId: string) {
   return db.transaction(async (tx) => {
+    // Drizzle's transaction type is structurally compatible with Db but not exported as the same alias.
     const txDb = tx as unknown as Db
     const user = await assertUserInScope(txDb, ctx, userId, 'users.archive')
     assertSelfGuard(ctx, user)

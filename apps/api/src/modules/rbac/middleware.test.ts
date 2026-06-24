@@ -19,6 +19,7 @@ import { authMiddleware } from '../../middleware/auth'
 import { okResponse } from '../../lib/errors'
 import { signAccessToken } from '../../lib/jwt'
 import type { AuthCtx, Env } from '../../types'
+import type { TestResponseBody } from '../../test/types'
 import { requirePermission, type AccessFilter, type RbacVariables } from './middleware'
 
 const TEST_JWT_SECRET = 'dev-egg-os-jwt-secret-change-in-production-min32chars'
@@ -85,7 +86,7 @@ testApp.get(
 async function req(path: string, token?: string) {
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
   const res = await testApp.request(`http://localhost${path}`, { method: 'GET', headers }, TEST_ENV)
-  return { status: res.status, body: await res.json() }
+  return { status: res.status, body: await res.json() as TestResponseBody }
 }
 
 async function tokenFor(userId: string) {

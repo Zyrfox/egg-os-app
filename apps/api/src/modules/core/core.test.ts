@@ -6,6 +6,7 @@ import app from '../../index'
 import { brands, companies, departments, outlets, users } from '@egg-os/db'
 import { seedCore } from '../../../../../packages/db/seeds/01-core'
 import { signAccessToken } from '../../lib/jwt'
+import type { TestResponseBody } from '../../test/types'
 
 const TEST_ENV = {
   DATABASE_URL: process.env.DATABASE_URL!,
@@ -21,7 +22,7 @@ let companyBId: string | undefined
 async function req(path: string, token?: string) {
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
   const res = await app.request(`http://localhost${path}`, { method: 'GET', headers }, TEST_ENV)
-  return { status: res.status, body: await res.json() }
+  return { status: res.status, body: await res.json() as TestResponseBody }
 }
 
 describe('CORE', () => {
