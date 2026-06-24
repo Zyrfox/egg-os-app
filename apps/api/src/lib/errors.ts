@@ -23,6 +23,7 @@ export const ERR = {
   NOT_FOUND:                { code: 'ERR_NOT_FOUND',                message: 'Data tidak ditemukan',                          http: 404 },
   DUPLICATE:                { code: 'ERR_DUPLICATE',                message: 'Data duplikat',                                  http: 409 },
   CONFLICT:                 { code: 'ERR_CONFLICT',                 message: 'Data bentrok / duplikat',                       http: 409 },
+  INSUFFICIENT_STOCK:       { code: 'ERR_INSUFFICIENT_STOCK',       message: 'Stok tidak mencukupi',                          http: 422 },
   INTERNAL:                 { code: 'ERR_INTERNAL',                 message: 'Terjadi kesalahan sistem',                      http: 500 },
   INVALID_CREDENTIALS:      { code: 'ERR_INVALID_CREDENTIALS',      message: 'Email atau password tidak sesuai',              http: 401 },
   USER_INACTIVE:            { code: 'ERR_USER_INACTIVE',            message: 'Akun tidak aktif',                              http: 403 },

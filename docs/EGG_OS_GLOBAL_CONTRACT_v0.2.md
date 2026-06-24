@@ -89,6 +89,7 @@ Format: `ERR_{DOMAIN}_{REASON}` — UPPER_SNAKE. Setiap error punya **kode stabi
 | `ERR_TOKEN_USED` | 409 | Single-use token dipakai ulang |
 | `ERR_LOGIN_LOCKED` | 429 | Gagal login melebihi batas |
 | `ERR_NEGATIVE_STOCK` | 422 | Stock out bikin `current_stock < 0` |
+| `ERR_INSUFFICIENT_STOCK` | 422 | Stok tidak mencukupi untuk stock_out/waste |
 | `ERR_STOCK_BEFORE_USE` | 422 | Pakai item yang belum di-stock-in/validasi |
 | `ERR_EVIDENCE_REQUIRED` | 422 | High-risk action tanpa evidence |
 | `ERR_SELF_APPROVAL` | 403 | Requester mencoba approve/review request-nya sendiri |

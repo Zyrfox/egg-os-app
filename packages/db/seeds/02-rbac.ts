@@ -50,6 +50,7 @@ export const RBAC_PERMISSION_CATALOG: PermissionSeed[] = [
   { code: 'users.suspend', description: 'Suspend users' },
   { code: 'users.archive', description: 'Archive users' },
   { code: 'inventory.read', description: 'Read inventory' },
+  { code: 'inventory.item_manage', description: 'Manage inventory item master data' },
   { code: 'inventory.stock_in', description: 'Create stock-in entries' },
   { code: 'inventory.stock_out', description: 'Create stock-out entries' },
   { code: 'inventory.opname', description: 'Run inventory opname' },
@@ -69,6 +70,7 @@ const rbacPermissionCodes = allPermissionCodes.filter((code) => code.startsWith(
 const corePermissionCodes = allPermissionCodes.filter((code) => code.startsWith('core.'))
 const usersPermissionCodes = allPermissionCodes.filter((code) => code.startsWith('users.'))
 const inventoryPermissionCodes = allPermissionCodes.filter((code) => code.startsWith('inventory.'))
+const inventoryOperationalPermissionCodes = inventoryPermissionCodes.filter((code) => code !== 'inventory.item_manage')
 const readPermissionCodes = allPermissionCodes.filter((code) => {
   const action = code.split('.')[1] ?? ''
   return action === 'read' || action.endsWith('_read')
@@ -91,6 +93,7 @@ export const RBAC_STARTER_ROLES: RoleSeed[] = [
       ...rbacPermissionCodes,
       ...corePermissionCodes,
       ...usersPermissionCodes,
+      'inventory.item_manage',
       'audit.read',
       'export.run',
     ],
@@ -125,7 +128,7 @@ export const RBAC_STARTER_ROLES: RoleSeed[] = [
     description: 'Outlet-scoped supervisor access',
     defaultScopeType: 'outlet',
     permissions: [
-      ...inventoryPermissionCodes,
+      ...inventoryOperationalPermissionCodes,
       'reports.read',
       'reports.validate',
       'approval.request',
