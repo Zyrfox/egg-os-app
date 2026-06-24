@@ -11,6 +11,8 @@ dist/
 
 # environment variables — never commit
 .env
+.env.test
+.env.test.local
 .env.local
 .env.*.local
 *.env
