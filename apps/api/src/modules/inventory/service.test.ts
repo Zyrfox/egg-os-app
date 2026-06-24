@@ -22,6 +22,7 @@ import {
   createStockOut,
   createWaste,
   getBalances,
+  getMovements,
   InventoryServiceError,
   reconcileBalanceWithLedger,
   type InventoryServiceContext,
@@ -73,6 +74,34 @@ function ctx(permission: PermissionCode, outletId = OUTLET_A_ID): InventoryServi
     companyId: COMPANY_ID,
     actorUserId: ACTOR_USER_ID,
     accessFilter: accessFilter(permission, outletId),
+  }
+}
+
+function readCtxWithStructuralScopes(structuralScopes: AccessFilter['structuralScopes']): InventoryServiceContext {
+  return {
+    companyId: COMPANY_ID,
+    actorUserId: ACTOR_USER_ID,
+    accessFilter: {
+      permission: 'inventory.read',
+      ownOnly: false,
+      assignedOnly: false,
+      rowLevelScopes: [],
+      structuralScopes,
+    },
+  }
+}
+
+function ownOnlyReadCtx(): InventoryServiceContext {
+  return {
+    companyId: COMPANY_ID,
+    actorUserId: ACTOR_USER_ID,
+    accessFilter: {
+      permission: 'inventory.read',
+      ownOnly: true,
+      assignedOnly: false,
+      rowLevelScopes: [{ scopeType: 'own', scopeId: null }],
+      structuralScopes: [],
+    },
   }
 }
 
@@ -480,5 +509,128 @@ describe('INV-CORE service ledger logic', () => {
     const result = await getBalances(db, ctx('inventory.read', OUTLET_A_ID))
     expect(result.data.map((row) => row.outlet_id)).toEqual([OUTLET_A_ID])
     expect(result.data[0]?.qty_base).toBe('5.000000')
+    expect(result.meta).toEqual({ page: 1, page_size: 50, total: 1 })
+  })
+
+  it('getBalances paginates visible rows with total from SQL filters', async () => {
+    await db.insert(stockBalances).values([
+      {
+        companyId: COMPANY_ID,
+        itemId: PCS_ITEM_ID,
+        outletId: OUTLET_A_ID,
+        qtyBase: '1.000000',
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+      {
+        companyId: COMPANY_ID,
+        itemId: PCS_ITEM_ID,
+        outletId: OUTLET_B_ID,
+        qtyBase: '2.000000',
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      },
+      {
+        companyId: COMPANY_ID,
+        itemId: GRAM_ITEM_ID,
+        outletId: OUTLET_A_ID,
+        qtyBase: '3.000000',
+        updatedAt: new Date('2026-01-03T00:00:00.000Z'),
+      },
+    ])
+
+    const brandReadCtx = readCtxWithStructuralScopes([{ scopeType: 'brand', scopeId: BRAND_ID }])
+    const page1 = await getBalances(db, brandReadCtx, { page: 1, pageSize: 2 })
+    const page2 = await getBalances(db, brandReadCtx, { page: 2, pageSize: 2 })
+
+    expect(page1.meta).toEqual({ page: 1, page_size: 2, total: 3 })
+    expect(page1.data).toHaveLength(2)
+    expect(page1.data.map((row) => row.qty_base)).toEqual(['3.000000', '2.000000'])
+    expect(page2.meta).toEqual({ page: 2, page_size: 2, total: 3 })
+    expect(page2.data.map((row) => row.qty_base)).toEqual(['1.000000'])
+  })
+
+  it('getBalances rejects outlet query outside visible scope with 404', async () => {
+    await expect(
+      getBalances(db, ctx('inventory.read', OUTLET_A_ID), { outletId: OUTLET_B_ID })
+    ).rejects.toMatchObject({
+      status: 404,
+      code: 'ERR_OUT_OF_SCOPE',
+    })
+  })
+
+  it('getBalances returns empty result for row-level-only inventory access', async () => {
+    await db.insert(stockBalances).values({
+      companyId: COMPANY_ID,
+      itemId: PCS_ITEM_ID,
+      outletId: OUTLET_A_ID,
+      qtyBase: '5.000000',
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    })
+
+    const result = await getBalances(db, ownOnlyReadCtx())
+    expect(result).toEqual({
+      data: [],
+      meta: { page: 1, page_size: 50, total: 0 },
+    })
+  })
+
+  it('getMovements orders by created_at desc and paginates visible rows', async () => {
+    await db.insert(stockMovements).values([
+      {
+        companyId: COMPANY_ID,
+        itemId: PCS_ITEM_ID,
+        outletId: OUTLET_A_ID,
+        movementType: 'stock_in',
+        qtyBase: '1.000000',
+        inputQty: '1.000000',
+        inputUnitId: PCS_UNIT_ID,
+        reason: 'oldest',
+        refNo: 'OLD',
+        createdBy: ACTOR_USER_ID,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+      {
+        companyId: COMPANY_ID,
+        itemId: PCS_ITEM_ID,
+        outletId: OUTLET_A_ID,
+        movementType: 'stock_out',
+        qtyBase: '-1.000000',
+        inputQty: '1.000000',
+        inputUnitId: PCS_UNIT_ID,
+        reason: 'middle',
+        refNo: 'MID',
+        createdBy: ACTOR_USER_ID,
+        createdAt: new Date('2026-01-02T00:00:00.000Z'),
+      },
+      {
+        companyId: COMPANY_ID,
+        itemId: PCS_ITEM_ID,
+        outletId: OUTLET_A_ID,
+        movementType: 'waste',
+        qtyBase: '-1.000000',
+        inputQty: '1.000000',
+        inputUnitId: PCS_UNIT_ID,
+        reason: 'newest',
+        refNo: 'NEW',
+        createdBy: ACTOR_USER_ID,
+        createdAt: new Date('2026-01-03T00:00:00.000Z'),
+      },
+    ])
+
+    const page1 = await getMovements(db, ctx('inventory.read', OUTLET_A_ID), { page: 1, pageSize: 2 })
+    const page2 = await getMovements(db, ctx('inventory.read', OUTLET_A_ID), { page: 2, pageSize: 2 })
+
+    expect(page1.meta).toEqual({ page: 1, page_size: 2, total: 3 })
+    expect(page1.data.map((row) => row.ref_no)).toEqual(['NEW', 'MID'])
+    expect(page2.meta).toEqual({ page: 2, page_size: 2, total: 3 })
+    expect(page2.data.map((row) => row.ref_no)).toEqual(['OLD'])
+  })
+
+  it('getMovements rejects outlet query outside visible scope with 404', async () => {
+    await expect(
+      getMovements(db, ctx('inventory.read', OUTLET_A_ID), { outletId: OUTLET_B_ID })
+    ).rejects.toMatchObject({
+      status: 404,
+      code: 'ERR_OUT_OF_SCOPE',
+    })
   })
 })

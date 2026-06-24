@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, lte, sql as drizzleSql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNull, lte, sql as drizzleSql } from 'drizzle-orm'
 import {
   itemUnitConversions,
   items,
@@ -240,6 +240,16 @@ async function assertOutletInScope(db: Db, ctx: InventoryServiceContext, outletI
   const orgTree = await buildOrgTree(db, ctx.companyId)
   const scopes = permissionScopes(ctx, permission)
   if (!outletVisibleWithScopes(scopes, permission, outletId, orgTree)) throw outOfScope()
+}
+
+async function visibleOutletIdsForPermission(db: Db, ctx: InventoryServiceContext, permission: string) {
+  const orgTree = await buildOrgTree(db, ctx.companyId)
+  const scopes = permissionScopes(ctx, permission)
+  if (scopes.length === 0) return []
+
+  return Object.keys(orgTree.outletsById).filter((outletId) => {
+    return outletVisibleWithScopes(scopes, permission, outletId, orgTree)
+  })
 }
 
 async function prepareMovement(
@@ -505,44 +515,58 @@ export async function createOpname(db: Db, ctx: InventoryServiceContext, input: 
   })
 }
 
-function canSeeOutlet(scopes: ScopeRef[], permission: string, outletId: string, orgTree: OrgTree) {
-  return outletVisibleWithScopes(scopes, permission, outletId, orgTree)
-}
-
 export async function getBalances(db: Db, ctx: InventoryServiceContext, query: BalanceQuery = {}) {
   const page = pageOf(query)
   const pageSize = pageSizeOf(query)
-  const conditions = [eq(stockBalances.companyId, ctx.companyId), isNull(items.deletedAt)]
+  const visibleOutletIds = await visibleOutletIdsForPermission(db, ctx, 'inventory.read')
+
+  if (query.outletId && !visibleOutletIds.includes(query.outletId)) {
+    throw outOfScope()
+  }
+
+  if (visibleOutletIds.length === 0) {
+    return {
+      data: [],
+      meta: {
+        page,
+        page_size: pageSize,
+        total: 0,
+      },
+    }
+  }
+
+  const conditions = [
+    eq(stockBalances.companyId, ctx.companyId),
+    inArray(stockBalances.outletId, visibleOutletIds),
+    isNull(items.deletedAt),
+  ]
 
   if (query.itemId) conditions.push(eq(stockBalances.itemId, query.itemId))
   if (query.outletId) conditions.push(eq(stockBalances.outletId, query.outletId))
   if (query.categoryId) conditions.push(eq(items.categoryId, query.categoryId))
 
-  if (query.outletId) {
-    await getOutlet(db, ctx.companyId, query.outletId)
-    await assertOutletInScope(db, ctx, query.outletId, 'inventory.read')
-  }
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({ balance: stockBalances })
+      .from(stockBalances)
+      .innerJoin(items, and(eq(stockBalances.itemId, items.id), eq(items.companyId, ctx.companyId)))
+      .where(and(...conditions))
+      .orderBy(desc(stockBalances.updatedAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    db
+      .select({ count: drizzleSql<number>`count(*)::int` })
+      .from(stockBalances)
+      .innerJoin(items, and(eq(stockBalances.itemId, items.id), eq(items.companyId, ctx.companyId)))
+      .where(and(...conditions)),
+  ])
 
-  const rows = await db
-    .select({ balance: stockBalances })
-    .from(stockBalances)
-    .innerJoin(items, and(eq(stockBalances.itemId, items.id), eq(items.companyId, ctx.companyId)))
-    .where(and(...conditions))
-    .orderBy(desc(stockBalances.updatedAt))
-
-  const orgTree = await buildOrgTree(db, ctx.companyId)
-  const scopes = permissionScopes(ctx, 'inventory.read')
-  const visibleRows = rows
-    .map((row) => row.balance)
-    .filter((row) => canSeeOutlet(scopes, 'inventory.read', row.outletId, orgTree))
-
-  const start = (page - 1) * pageSize
   return {
-    data: visibleRows.slice(start, start + pageSize).map(balanceDto),
+    data: rows.map((row) => balanceDto(row.balance)),
     meta: {
       page,
       page_size: pageSize,
-      total: visibleRows.length,
+      total: countRows[0]?.count ?? 0,
     },
   }
 }
@@ -550,7 +574,27 @@ export async function getBalances(db: Db, ctx: InventoryServiceContext, query: B
 export async function getMovements(db: Db, ctx: InventoryServiceContext, query: MovementQuery = {}) {
   const page = pageOf(query)
   const pageSize = pageSizeOf(query)
-  const conditions = [eq(stockMovements.companyId, ctx.companyId)]
+  const visibleOutletIds = await visibleOutletIdsForPermission(db, ctx, 'inventory.read')
+
+  if (query.outletId && !visibleOutletIds.includes(query.outletId)) {
+    throw outOfScope()
+  }
+
+  if (visibleOutletIds.length === 0) {
+    return {
+      data: [],
+      meta: {
+        page,
+        page_size: pageSize,
+        total: 0,
+      },
+    }
+  }
+
+  const conditions = [
+    eq(stockMovements.companyId, ctx.companyId),
+    inArray(stockMovements.outletId, visibleOutletIds),
+  ]
 
   if (query.itemId) conditions.push(eq(stockMovements.itemId, query.itemId))
   if (query.outletId) conditions.push(eq(stockMovements.outletId, query.outletId))
@@ -558,28 +602,26 @@ export async function getMovements(db: Db, ctx: InventoryServiceContext, query: 
   if (query.createdFrom) conditions.push(gte(stockMovements.createdAt, query.createdFrom))
   if (query.createdTo) conditions.push(lte(stockMovements.createdAt, query.createdTo))
 
-  if (query.outletId) {
-    await getOutlet(db, ctx.companyId, query.outletId)
-    await assertOutletInScope(db, ctx, query.outletId, 'inventory.read')
-  }
+  const [rows, countRows] = await Promise.all([
+    db
+      .select()
+      .from(stockMovements)
+      .where(and(...conditions))
+      .orderBy(desc(stockMovements.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    db
+      .select({ count: drizzleSql<number>`count(*)::int` })
+      .from(stockMovements)
+      .where(and(...conditions)),
+  ])
 
-  const rows = await db
-    .select()
-    .from(stockMovements)
-    .where(and(...conditions))
-    .orderBy(desc(stockMovements.createdAt))
-
-  const orgTree = await buildOrgTree(db, ctx.companyId)
-  const scopes = permissionScopes(ctx, 'inventory.read')
-  const visibleRows = rows.filter((row) => canSeeOutlet(scopes, 'inventory.read', row.outletId, orgTree))
-
-  const start = (page - 1) * pageSize
   return {
-    data: visibleRows.slice(start, start + pageSize).map(movementDto),
+    data: rows.map(movementDto),
     meta: {
       page,
       page_size: pageSize,
-      total: visibleRows.length,
+      total: countRows[0]?.count ?? 0,
     },
   }
 }
