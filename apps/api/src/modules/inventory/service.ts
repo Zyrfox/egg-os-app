@@ -122,7 +122,7 @@ function hasNonZeroDigit(value: string) {
   return /[1-9]/.test(value.replace('.', ''))
 }
 
-function normalizeDecimal(value: string, field: string, options: { allowZero: boolean }) {
+export function normalizeDecimal(value: string, field: string, options: { allowZero: boolean }) {
   const trimmed = value.trim()
   if (!/^(0|[1-9]\d*)(\.\d{1,6})?$/.test(trimmed)) {
     throw validation([{ field, issue: 'harus decimal positif dengan maksimal 6 angka di belakang koma' }])
@@ -135,7 +135,7 @@ function normalizeDecimal(value: string, field: string, options: { allowZero: bo
   return trimmed
 }
 
-function negateDecimal(value: string) {
+export function negateDecimal(value: string) {
   if (!hasNonZeroDigit(value)) return value
   return value.startsWith('-') ? value.slice(1) : `-${value}`
 }
@@ -236,7 +236,7 @@ function outletVisibleWithScopes(scopes: ScopeRef[], permission: string, outletI
   return scopes.some((scope) => scopeCovers({ permission, ...scope } as Grant, target, orgTree))
 }
 
-async function assertOutletInScope(db: Db, ctx: InventoryServiceContext, outletId: string, permission: string) {
+export async function assertOutletInScope(db: Db, ctx: InventoryServiceContext, outletId: string, permission: string) {
   const orgTree = await buildOrgTree(db, ctx.companyId)
   const scopes = permissionScopes(ctx, permission)
   if (!outletVisibleWithScopes(scopes, permission, outletId, orgTree)) throw outOfScope()
@@ -268,7 +268,7 @@ async function prepareMovement(
   return conversion
 }
 
-async function upsertIncreasedBalance(
+export async function upsertIncreasedBalance(
   db: Db,
   ctx: InventoryServiceContext,
   input: { itemId: string; outletId: string; qtyBase: string }
@@ -294,7 +294,7 @@ async function upsertIncreasedBalance(
   return balance
 }
 
-async function subtractBalanceIfSufficient(
+export async function subtractBalanceIfSufficient(
   db: Db,
   ctx: InventoryServiceContext,
   input: { itemId: string; outletId: string; qtyBase: string }
