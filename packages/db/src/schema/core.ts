@@ -74,6 +74,9 @@ export const outlets = pgTable('outlets', {
   companyIdx: index('outlets_company_idx').on(t.companyId),
   brandIdx: index('outlets_brand_idx').on(t.brandId),
   statusIdx: index('outlets_status_idx').on(t.status),
+  companyInTransitUq: uniqueIndex('outlets_company_in_transit_uq')
+    .on(t.companyId)
+    .where(sql`${t.outletType} = 'in_transit' AND ${t.deletedAt} IS NULL`),
 }))
 
 export const departments = pgTable('departments', {
@@ -99,4 +102,3 @@ export const departments = pgTable('departments', {
   outletIdx: index('departments_outlet_idx').on(t.outletId),
   statusIdx: index('departments_status_idx').on(t.status),
 }))
-

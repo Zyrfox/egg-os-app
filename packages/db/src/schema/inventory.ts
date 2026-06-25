@@ -20,7 +20,8 @@ const auditColumns = {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }
 
-const movementTypes = sql`('stock_in', 'stock_out', 'opname', 'waste')`
+const movementTypes = sql`('stock_in', 'stock_out', 'opname', 'waste', 'transfer_in', 'transfer_out')`
+const transferStatuses = sql`('pending', 'received')`
 
 export const itemCategories = pgTable('item_categories', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
@@ -108,4 +109,30 @@ export const stockBalances = pgTable('stock_balances', {
 }, (t) => ({
   itemOutletUq: uniqueIndex('stock_balances_item_outlet_uq').on(t.itemId, t.outletId),
   outletIdx: index('stock_balances_outlet_idx').on(t.outletId),
+}))
+
+export const stockTransfers = pgTable('stock_transfers', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid('company_id').notNull().references(() => companies.id),
+  fromOutletId: uuid('from_outlet_id').notNull().references(() => outlets.id),
+  toOutletId: uuid('to_outlet_id').notNull().references(() => outlets.id),
+  itemId: uuid('item_id').notNull().references(() => items.id),
+  qtyBase: numeric('qty_base', { precision: 18, scale: 6 }).notNull(),
+  inputQty: numeric('input_qty', { precision: 18, scale: 6 }).notNull(),
+  inputUnitId: uuid('input_unit_id').notNull().references(() => units.id),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  refNo: text('ref_no'),
+  reason: text('reason'),
+  sentBy: uuid('sent_by').notNull().references(() => users.id),
+  sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+  receivedBy: uuid('received_by').references(() => users.id),
+  receivedAt: timestamp('received_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  statusCheck: check('stock_transfers_status_check', sql`${t.status} IN ${transferStatuses}`),
+  differentOutletsCheck: check('stock_transfers_different_outlets_check', sql`${t.fromOutletId} <> ${t.toOutletId}`),
+  companyIdx: index('stock_transfers_company_idx').on(t.companyId),
+  statusIdx: index('stock_transfers_status_idx').on(t.status),
+  fromOutletIdx: index('stock_transfers_from_outlet_idx').on(t.fromOutletId),
+  toOutletIdx: index('stock_transfers_to_outlet_idx').on(t.toOutletId),
 }))
