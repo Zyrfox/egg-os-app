@@ -95,7 +95,7 @@ function validation(details: ErrorDetail[]) {
 }
 
 function outOfScope() {
-  return new InventoryServiceError(404, 'ERR_OUT_OF_SCOPE', 'Data di luar cakupan Anda')
+  return new InventoryServiceError(ERR.OUT_OF_SCOPE.http, ERR.OUT_OF_SCOPE.code, ERR.OUT_OF_SCOPE.message)
 }
 
 function insufficientStock() {

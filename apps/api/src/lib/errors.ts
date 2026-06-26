@@ -21,6 +21,7 @@ export const ERR = {
   UNAUTHENTICATED:          { code: 'ERR_UNAUTHENTICATED',          message: 'Sesi tidak valid / token kedaluwarsa',          http: 401 },
   FORBIDDEN:                { code: 'ERR_FORBIDDEN',                message: 'Akses ditolak',                                 http: 403 },
   NOT_FOUND:                { code: 'ERR_NOT_FOUND',                message: 'Data tidak ditemukan',                          http: 404 },
+  OUT_OF_SCOPE:             { code: 'ERR_OUT_OF_SCOPE',             message: 'Data di luar cakupan Anda',                     http: 404 },
   DUPLICATE:                { code: 'ERR_DUPLICATE',                message: 'Data duplikat',                                  http: 409 },
   CONFLICT:                 { code: 'ERR_CONFLICT',                 message: 'Data bentrok / duplikat',                       http: 409 },
   INSUFFICIENT_STOCK:       { code: 'ERR_INSUFFICIENT_STOCK',       message: 'Stok tidak mencukupi',                          http: 422 },
