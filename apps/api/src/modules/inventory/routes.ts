@@ -5,6 +5,8 @@ import {
   InventoryMovementQuery,
   InventoryMovementReq,
   InventoryOpnameReq,
+  InventoryTransferCreateReq,
+  InventoryTransferReceiveParams,
   z,
 } from '@egg-os/validation'
 import { createDb } from '../../lib/db'
@@ -22,6 +24,7 @@ import {
   InventoryServiceError,
   type InventoryServiceContext,
 } from './service'
+import { createTransfer, receiveTransfer } from './transfer.service'
 
 type InventoryContext = Context<{ Bindings: Env; Variables: RbacVariables }>
 
@@ -143,6 +146,35 @@ inventory.post('/opname', authMiddleware, requirePermission('inventory.opname'),
 
   try {
     return c.json(okResponse(await createOpname(db, serviceCtx(c), parsed.data)), 201)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.post('/transfers', authMiddleware, requirePermission('inventory.transfer_send'), async (c) => {
+  const body = await parseJson(c)
+  const parsed = InventoryTransferCreateReq.safeParse(body)
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await createTransfer(db, serviceCtx(c), parsed.data)), 201)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.post('/transfers/:id/receive', authMiddleware, requirePermission('inventory.transfer_receive'), async (c) => {
+  const parsed = InventoryTransferReceiveParams.safeParse(c.req.param())
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await receiveTransfer(db, serviceCtx(c), parsed.data.id)), 200)
   } catch (error) {
     if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
     throw error

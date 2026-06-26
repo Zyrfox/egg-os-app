@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
-import { inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import * as schema from '@egg-os/db'
 import {
   brands,
@@ -14,6 +14,7 @@ import {
   roles,
   stockBalances,
   stockMovements,
+  stockTransfers,
   units,
   userRoles,
   users,
@@ -38,12 +39,15 @@ const OTHER_BRAND_ID = '96000000-0000-4000-8000-000000000004'
 const OUTLET_A_ID = '96000000-0000-4000-8000-000000000005'
 const OUTLET_B_ID = '96000000-0000-4000-8000-000000000006'
 const OTHER_OUTLET_ID = '96000000-0000-4000-8000-000000000007'
+const IN_TRANSIT_OUTLET_ID = '96000000-0000-4000-8000-000000000011'
 const ADMIN_USER_ID = '96000000-0000-4000-8000-000000000008'
 const READ_ONLY_USER_ID = '96000000-0000-4000-8000-000000000009'
 const OTHER_ACTOR_USER_ID = '96000000-0000-4000-8000-000000000010'
+const RECEIVER_USER_ID = '96000000-0000-4000-8000-000000000012'
 
 const ADMIN_ROLE_ID = '96100000-0000-4000-8000-000000000001'
 const READ_ONLY_ROLE_ID = '96100000-0000-4000-8000-000000000002'
+const RECEIVER_ROLE_ID = '96100000-0000-4000-8000-000000000003'
 
 const PCS_UNIT_ID = '96200000-0000-4000-8000-000000000001'
 const KARTON_UNIT_ID = '96200000-0000-4000-8000-000000000002'
@@ -57,11 +61,14 @@ const permissionCodes = [
   'inventory.stock_out',
   'inventory.waste',
   'inventory.opname',
+  'inventory.transfer_send',
+  'inventory.transfer_receive',
 ]
 
 const permissionIds = new Map<string, string>()
 let adminToken = ''
 let readOnlyToken = ''
+let receiverToken = ''
 
 async function req(method: string, path: string, token?: string, body?: unknown): Promise<{ status: number; body: TestResponseBody }> {
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
@@ -93,6 +100,7 @@ async function tokenFor(userId: string) {
 
 async function cleanupFixtures() {
   await sql`DELETE FROM stock_movements WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
+  await sql`DELETE FROM stock_transfers WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM stock_balances WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM item_unit_conversions WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM items WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
@@ -109,6 +117,7 @@ async function cleanupFixtures() {
 
 async function resetLedger() {
   await sql`DELETE FROM stock_movements WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
+  await sql`DELETE FROM stock_transfers WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM stock_balances WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
 }
 
@@ -169,6 +178,15 @@ async function seedFixtures() {
   await db.insert(outlets).values([
     { id: OUTLET_A_ID, companyId: COMPANY_ID, brandId: BRAND_ID, outletCode: 'INV-R-A', outletName: 'Inventory Route A', status: 'active' },
     { id: OUTLET_B_ID, companyId: COMPANY_ID, brandId: BRAND_ID, outletCode: 'INV-R-B', outletName: 'Inventory Route B', status: 'active' },
+    {
+      id: IN_TRANSIT_OUTLET_ID,
+      companyId: COMPANY_ID,
+      brandId: BRAND_ID,
+      outletCode: 'INV-R-TRANSIT',
+      outletName: 'Inventory Route In Transit',
+      outletType: 'in_transit',
+      status: 'active',
+    },
     { id: OTHER_OUTLET_ID, companyId: OTHER_COMPANY_ID, brandId: OTHER_BRAND_ID, outletCode: 'INV-R-OTHER', outletName: 'Inventory Other Outlet', status: 'active' },
   ])
 
@@ -197,15 +215,25 @@ async function seedFixtures() {
       status: 'active',
       firstLoginRequired: false,
     },
+    {
+      id: RECEIVER_USER_ID,
+      companyId: COMPANY_ID,
+      email: 'inventory-routes-receiver@egg.test',
+      fullName: 'Inventory Routes Receiver',
+      status: 'active',
+      firstLoginRequired: false,
+    },
   ])
 
   await db.insert(roles).values([
     { id: ADMIN_ROLE_ID, companyId: COMPANY_ID, code: 'INV_ROUTE_ADMIN', name: 'Inventory Route Admin', defaultScopeType: 'outlet', isSystem: false },
     { id: READ_ONLY_ROLE_ID, companyId: COMPANY_ID, code: 'INV_ROUTE_READ_ONLY', name: 'Inventory Route Read Only', defaultScopeType: 'outlet', isSystem: false },
+    { id: RECEIVER_ROLE_ID, companyId: COMPANY_ID, code: 'INV_ROUTE_RECEIVER', name: 'Inventory Route Receiver', defaultScopeType: 'outlet', isSystem: false },
   ])
 
   await assignPermissions(ADMIN_ROLE_ID, permissionCodes)
   await assignPermissions(READ_ONLY_ROLE_ID, ['inventory.read'])
+  await assignPermissions(RECEIVER_ROLE_ID, ['inventory.transfer_receive'])
 
   await db.insert(userRoles).values([
     {
@@ -222,6 +250,14 @@ async function seedFixtures() {
       companyId: COMPANY_ID,
       scopeType: 'outlet',
       scopeId: OUTLET_A_ID,
+      grantedBy: ADMIN_USER_ID,
+    },
+    {
+      userId: RECEIVER_USER_ID,
+      roleId: RECEIVER_ROLE_ID,
+      companyId: COMPANY_ID,
+      scopeType: 'outlet',
+      scopeId: OUTLET_B_ID,
       grantedBy: ADMIN_USER_ID,
     },
   ])
@@ -250,11 +286,72 @@ function expectSuccessEnvelope(body: TestResponseBody) {
   expect(body.data).toBeDefined()
 }
 
+async function seedSourceBalance(qtyBase = '60.000000') {
+  await db.insert(stockBalances).values({
+    companyId: COMPANY_ID,
+    itemId: ITEM_A_ID,
+    outletId: OUTLET_A_ID,
+    qtyBase,
+  })
+}
+
+async function balanceQty(outletId: string) {
+  const row = await db
+    .select({ qtyBase: stockBalances.qtyBase })
+    .from(stockBalances)
+    .where(
+      and(
+        eq(stockBalances.companyId, COMPANY_ID),
+        eq(stockBalances.itemId, ITEM_A_ID),
+        eq(stockBalances.outletId, outletId)
+      )
+    )
+    .limit(1)
+    .then((rows) => rows[0] ?? null)
+
+  return row?.qtyBase ?? '0.000000'
+}
+
+async function transferRows() {
+  return db
+    .select()
+    .from(stockTransfers)
+    .where(eq(stockTransfers.companyId, COMPANY_ID))
+}
+
+async function movementRows() {
+  return db
+    .select()
+    .from(stockMovements)
+    .where(eq(stockMovements.companyId, COMPANY_ID))
+}
+
+async function createPendingTransfer(refNo = 'TRF-HTTP-001') {
+  await seedSourceBalance()
+  const { status, body } = await req('POST', '/api/v1/inventory/transfers', adminToken, {
+    item_id: ITEM_A_ID,
+    from_outlet_id: OUTLET_A_ID,
+    to_outlet_id: OUTLET_B_ID,
+    qty: '2',
+    unit_id: KARTON_UNIT_ID,
+    reason: 'route transfer',
+    ref_no: refNo,
+  })
+
+  expect(status).toBe(201)
+  expectSuccessEnvelope(body)
+
+  return body.data as unknown as {
+    transfer: { id: string; status: string; qty_base: string }
+  }
+}
+
 beforeAll(async () => {
   await cleanupFixtures()
   await seedFixtures()
   adminToken = await tokenFor(ADMIN_USER_ID)
   readOnlyToken = await tokenFor(READ_ONLY_USER_ID)
+  receiverToken = await tokenFor(RECEIVER_USER_ID)
 })
 
 beforeEach(async () => {
@@ -369,6 +466,191 @@ describe('INV-CORE routes — write operations', () => {
     expect(status).toBe(422)
     expect(body.success).toBe(false)
     expect(body.error.code).toBe('ERR_INSUFFICIENT_STOCK')
+  })
+})
+
+describe('INV-FLOW transfer routes', () => {
+  it('POST /transfers sends 2 KARTON from outlet A to in-transit and creates pending transfer', async () => {
+    await seedSourceBalance()
+
+    const { status, body } = await req('POST', '/api/v1/inventory/transfers', adminToken, {
+      item_id: ITEM_A_ID,
+      from_outlet_id: OUTLET_A_ID,
+      to_outlet_id: OUTLET_B_ID,
+      qty: '2',
+      unit_id: KARTON_UNIT_ID,
+      reason: 'route transfer send',
+      ref_no: 'TRF-HTTP-SEND',
+    })
+
+    expect(status).toBe(201)
+    expectSuccessEnvelope(body)
+    const data = body.data as unknown as {
+      transfer: { status: string; qty_base: string; input_qty: string }
+      movements: Array<{ movement_type: string; outlet_id: string; qty_base: string }>
+    }
+
+    expect(data.transfer.status).toBe('pending')
+    expect(data.transfer.qty_base).toBe('48.000000')
+    expect(data.transfer.input_qty).toBe('2.000000')
+    expect(data.movements.map((movement) => [movement.movement_type, movement.outlet_id, movement.qty_base])).toEqual([
+      ['transfer_out', OUTLET_A_ID, '-48.000000'],
+      ['transfer_in', IN_TRANSIT_OUTLET_ID, '48.000000'],
+    ])
+    expect(await balanceQty(OUTLET_A_ID)).toBe('12.000000')
+    expect(await balanceQty(IN_TRANSIT_OUTLET_ID)).toBe('48.000000')
+
+    const transfers = await transferRows()
+    expect(transfers).toHaveLength(1)
+    expect(transfers[0].status).toBe('pending')
+  })
+
+  it('POST /transfers/:id/receive moves in-transit stock to destination and marks transfer received', async () => {
+    const sent = await createPendingTransfer('TRF-HTTP-RECEIVE')
+
+    const { status, body } = await req(
+      'POST',
+      `/api/v1/inventory/transfers/${sent.transfer.id}/receive`,
+      receiverToken,
+      { received_by: OTHER_ACTOR_USER_ID }
+    )
+
+    expect(status).toBe(200)
+    expectSuccessEnvelope(body)
+    const data = body.data as unknown as {
+      transfer: { status: string; received_by: string; qty_base: string }
+      movements: Array<{ movement_type: string; outlet_id: string; qty_base: string }>
+    }
+
+    expect(data.transfer.status).toBe('received')
+    expect(data.transfer.received_by).toBe(RECEIVER_USER_ID)
+    expect(data.transfer.qty_base).toBe('48.000000')
+    expect(data.movements.map((movement) => [movement.movement_type, movement.outlet_id, movement.qty_base])).toEqual([
+      ['transfer_out', IN_TRANSIT_OUTLET_ID, '-48.000000'],
+      ['transfer_in', OUTLET_B_ID, '48.000000'],
+    ])
+    expect(await balanceQty(IN_TRANSIT_OUTLET_ID)).toBe('0.000000')
+    expect(await balanceQty(OUTLET_B_ID)).toBe('48.000000')
+
+    const transfers = await transferRows()
+    expect(transfers[0].status).toBe('received')
+    expect(transfers[0].receivedBy).toBe(RECEIVER_USER_ID)
+  })
+
+  it('POST /transfers/:id/receive twice returns 422 ERR_ALREADY_RECEIVED without duplicate movement', async () => {
+    const sent = await createPendingTransfer('TRF-HTTP-DOUBLE')
+    await req('POST', `/api/v1/inventory/transfers/${sent.transfer.id}/receive`, receiverToken)
+    const movementCount = (await movementRows()).length
+
+    const { status, body } = await req('POST', `/api/v1/inventory/transfers/${sent.transfer.id}/receive`, receiverToken)
+
+    expect(status).toBe(422)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('ERR_ALREADY_RECEIVED')
+    expect(await movementRows()).toHaveLength(movementCount)
+    expect(await balanceQty(IN_TRANSIT_OUTLET_ID)).toBe('0.000000')
+    expect(await balanceQty(OUTLET_B_ID)).toBe('48.000000')
+  })
+
+  it('POST /transfers returns 422 ERR_INSUFFICIENT_STOCK when source balance is short', async () => {
+    const { status, body } = await req('POST', '/api/v1/inventory/transfers', adminToken, {
+      item_id: ITEM_A_ID,
+      from_outlet_id: OUTLET_A_ID,
+      to_outlet_id: OUTLET_B_ID,
+      qty: '2',
+      unit_id: KARTON_UNIT_ID,
+    })
+
+    expect(status).toBe(422)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('ERR_INSUFFICIENT_STOCK')
+    expect(await movementRows()).toHaveLength(0)
+    expect(await transferRows()).toHaveLength(0)
+    expect(await balanceQty(OUTLET_A_ID)).toBe('0.000000')
+  })
+
+  it('requires transfer_send for create and transfer_receive for receive', async () => {
+    const createDenied = await req('POST', '/api/v1/inventory/transfers', readOnlyToken, {
+      item_id: ITEM_A_ID,
+      from_outlet_id: OUTLET_A_ID,
+      to_outlet_id: OUTLET_B_ID,
+      qty: '1',
+      unit_id: PCS_UNIT_ID,
+    })
+
+    expect(createDenied.status).toBe(403)
+    expect(createDenied.body.success).toBe(false)
+    expect(createDenied.body.error.code).toBe('ERR_FORBIDDEN')
+
+    const sent = await createPendingTransfer('TRF-HTTP-RBAC')
+    const receiveDenied = await req('POST', `/api/v1/inventory/transfers/${sent.transfer.id}/receive`, readOnlyToken)
+
+    expect(receiveDenied.status).toBe(403)
+    expect(receiveDenied.body.success).toBe(false)
+    expect(receiveDenied.body.error.code).toBe('ERR_FORBIDDEN')
+  })
+
+  it('returns 404 ERR_OUT_OF_SCOPE when transfer source outlet is outside sender scope', async () => {
+    const { status, body } = await req('POST', '/api/v1/inventory/transfers', adminToken, {
+      item_id: ITEM_A_ID,
+      from_outlet_id: OUTLET_B_ID,
+      to_outlet_id: OUTLET_A_ID,
+      qty: '1',
+      unit_id: PCS_UNIT_ID,
+    })
+
+    expect(status).toBe(404)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('ERR_OUT_OF_SCOPE')
+    expect(await movementRows()).toHaveLength(0)
+    expect(await transferRows()).toHaveLength(0)
+  })
+
+  it('ignores client company_id and sent_by during create transfer', async () => {
+    await seedSourceBalance()
+
+    const { status, body } = await req('POST', '/api/v1/inventory/transfers', adminToken, {
+      company_id: OTHER_COMPANY_ID,
+      sent_by: OTHER_ACTOR_USER_ID,
+      item_id: ITEM_A_ID,
+      from_outlet_id: OUTLET_A_ID,
+      to_outlet_id: OUTLET_B_ID,
+      qty: '1',
+      unit_id: PCS_UNIT_ID,
+      ref_no: 'TRF-HTTP-IDENTITY',
+    })
+
+    expect(status).toBe(201)
+    expectSuccessEnvelope(body)
+    const data = body.data as unknown as {
+      transfer: { company_id: string; sent_by: string; qty_base: string }
+    }
+    expect(data.transfer.company_id).toBe(COMPANY_ID)
+    expect(data.transfer.sent_by).toBe(ADMIN_USER_ID)
+    expect(data.transfer.qty_base).toBe('1.000000')
+
+    const transfers = await transferRows()
+    expect(transfers[0].companyId).toBe(COMPANY_ID)
+    expect(transfers[0].sentBy).toBe(ADMIN_USER_ID)
+  })
+
+  it('validates transfer qty as decimal string and rejects number or invalid string', async () => {
+    for (const qty of [2, 'invalid']) {
+      const { status, body } = await req('POST', '/api/v1/inventory/transfers', adminToken, {
+        item_id: ITEM_A_ID,
+        from_outlet_id: OUTLET_A_ID,
+        to_outlet_id: OUTLET_B_ID,
+        qty,
+        unit_id: PCS_UNIT_ID,
+      })
+
+      expect(status).toBe(422)
+      expect(body.success).toBe(false)
+      expect(body.error.code).toBe('ERR_VALIDATION')
+    }
+
+    expect(await movementRows()).toHaveLength(0)
+    expect(await transferRows()).toHaveLength(0)
   })
 })
 

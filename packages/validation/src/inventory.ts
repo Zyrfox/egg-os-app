@@ -40,6 +40,30 @@ export const InventoryOpnameReq = z
     reason: value.reason,
   }))
 
+export const InventoryTransferCreateReq = z
+  .object({
+    item_id: z.string().uuid(),
+    from_outlet_id: z.string().uuid(),
+    to_outlet_id: z.string().uuid(),
+    qty: DecimalString,
+    unit_id: z.string().uuid(),
+    reason: NullableText,
+    ref_no: z.string().max(80).nullable().optional(),
+  })
+  .transform((value) => ({
+    itemId: value.item_id,
+    fromOutletId: value.from_outlet_id,
+    toOutletId: value.to_outlet_id,
+    qty: value.qty,
+    unitId: value.unit_id,
+    reason: value.reason,
+    refNo: value.ref_no,
+  }))
+
+export const InventoryTransferReceiveParams = z.object({
+  id: z.string().uuid(),
+})
+
 export const InventoryBalanceQuery = z
   .object({
     outlet_id: z.string().uuid().optional(),
@@ -78,5 +102,7 @@ export const InventoryMovementQuery = z
 
 export type InventoryMovementInput = z.infer<typeof InventoryMovementReq>
 export type InventoryOpnameInput = z.infer<typeof InventoryOpnameReq>
+export type InventoryTransferCreateInput = z.infer<typeof InventoryTransferCreateReq>
+export type InventoryTransferReceiveParamsInput = z.infer<typeof InventoryTransferReceiveParams>
 export type InventoryBalanceQueryInput = z.infer<typeof InventoryBalanceQuery>
 export type InventoryMovementQueryInput = z.infer<typeof InventoryMovementQuery>
