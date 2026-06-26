@@ -623,6 +623,26 @@ describe('SESSION / GUARD', () => {
     expect(body.error.code).toBe('ERR_UNAUTHENTICATED');
   });
 
+  it('D2b — JWT valid tapi DB user lookup error → 500 ERR_INTERNAL, bukan 401', async () => {
+    const token = await makeAccessToken(OWNER_ID, COMPANY_ID);
+    const res = await app.request(
+      'http://localhost/api/v1/auth/me',
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      {
+        ...TEST_ENV,
+        DATABASE_URL: 'postgresql://egg:egg@localhost:54323/egg_os_auth_missing_db',
+      }
+    );
+    const body = await res.json() as TestResponseBody;
+
+    expect(res.status).toBe(500);
+    expect(body.error.code).toBe('ERR_INTERNAL');
+    expect(res.status).not.toBe(401);
+  });
+
   it('D3 — user suspended mid-session → 401 ERR_UNAUTHENTICATED', async () => {
     const token = await makeAccessToken(SPV_ID, COMPANY_ID);
     await db.update(users).set({ status: 'suspended' }).where(eq(users.id, SPV_ID));
