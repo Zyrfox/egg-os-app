@@ -1,12 +1,20 @@
 import { Hono, type Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import {
+  AddConversionReq,
+  CreateCategoryReq,
+  CreateItemReq,
+  CreateUnitReq,
   InventoryBalanceQuery,
   InventoryMovementQuery,
   InventoryMovementReq,
   InventoryOpnameReq,
   InventoryTransferCreateReq,
   InventoryTransferReceiveParams,
+  ListCategoriesQuery,
+  ListItemsQuery,
+  ListUnitsQuery,
+  UpdateItemReq,
   z,
 } from '@egg-os/validation'
 import { createDb } from '../../lib/db'
@@ -24,11 +32,26 @@ import {
   InventoryServiceError,
   type InventoryServiceContext,
 } from './service'
+import {
+  addItemUnitConversion,
+  createCategory,
+  createItem,
+  createUnit,
+  getItem,
+  listCategories,
+  listItems,
+  listUnits,
+  updateItem,
+} from './master-data.service'
 import { createTransfer, receiveTransfer } from './transfer.service'
 
 type InventoryContext = Context<{ Bindings: Env; Variables: RbacVariables }>
 
 const inventory = new Hono<{ Bindings: Env; Variables: RbacVariables }>()
+
+const InventoryItemParams = z.object({
+  id: z.string().uuid(),
+})
 
 function formatZodErrors(err: z.ZodError) {
   return err.issues.map((issue) => ({
@@ -61,6 +84,146 @@ function serviceCtx(c: InventoryContext): InventoryServiceContext {
     accessFilter: c.get('accessFilter'),
   }
 }
+
+inventory.get('/items', authMiddleware, requirePermission('inventory.read'), async (c) => {
+  const parsed = ListItemsQuery.safeParse(c.req.query())
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    const result = await listItems(db, serviceCtx(c), parsed.data)
+    return c.json(okResponse(result.data, result.meta), 200)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.post('/items', authMiddleware, requirePermission('inventory.item_manage'), async (c) => {
+  const body = await parseJson(c)
+  const parsed = CreateItemReq.safeParse(body)
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await createItem(db, serviceCtx(c), parsed.data)), 201)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.post('/items/:id/units', authMiddleware, requirePermission('inventory.item_manage'), async (c) => {
+  const params = InventoryItemParams.safeParse(c.req.param())
+  if (!params.success) return validationResponse(c, params.error)
+
+  const body = await parseJson(c)
+  const parsed = AddConversionReq.safeParse(body)
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await addItemUnitConversion(db, serviceCtx(c), params.data.id, parsed.data)), 201)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.get('/items/:id', authMiddleware, requirePermission('inventory.read'), async (c) => {
+  const parsed = InventoryItemParams.safeParse(c.req.param())
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await getItem(db, serviceCtx(c), parsed.data.id)), 200)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.patch('/items/:id', authMiddleware, requirePermission('inventory.item_manage'), async (c) => {
+  const params = InventoryItemParams.safeParse(c.req.param())
+  if (!params.success) return validationResponse(c, params.error)
+
+  const body = await parseJson(c)
+  const parsed = UpdateItemReq.safeParse(body)
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await updateItem(db, serviceCtx(c), params.data.id, parsed.data)), 200)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.get('/units', authMiddleware, requirePermission('inventory.read'), async (c) => {
+  const parsed = ListUnitsQuery.safeParse(c.req.query())
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    const result = await listUnits(db, serviceCtx(c), parsed.data)
+    return c.json(okResponse(result.data, result.meta), 200)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.post('/units', authMiddleware, requirePermission('inventory.item_manage'), async (c) => {
+  const body = await parseJson(c)
+  const parsed = CreateUnitReq.safeParse(body)
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await createUnit(db, serviceCtx(c), parsed.data)), 201)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.get('/categories', authMiddleware, requirePermission('inventory.read'), async (c) => {
+  const parsed = ListCategoriesQuery.safeParse(c.req.query())
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    const result = await listCategories(db, serviceCtx(c), parsed.data)
+    return c.json(okResponse(result.data, result.meta), 200)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.post('/categories', authMiddleware, requirePermission('inventory.item_manage'), async (c) => {
+  const body = await parseJson(c)
+  const parsed = CreateCategoryReq.safeParse(body)
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await createCategory(db, serviceCtx(c), parsed.data)), 201)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
 
 inventory.get('/balances', authMiddleware, requirePermission('inventory.read'), async (c) => {
   const parsed = InventoryBalanceQuery.safeParse(c.req.query())

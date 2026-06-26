@@ -61,6 +61,7 @@ const permissionCodes = [
   'inventory.stock_out',
   'inventory.waste',
   'inventory.opname',
+  'inventory.item_manage',
   'inventory.transfer_send',
   'inventory.transfer_receive',
 ]
@@ -105,6 +106,7 @@ async function cleanupFixtures() {
   await sql`DELETE FROM item_unit_conversions WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM items WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM units WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
+  await sql`DELETE FROM item_categories WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM access_overrides WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM user_roles WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM role_permissions WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
@@ -119,6 +121,32 @@ async function resetLedger() {
   await sql`DELETE FROM stock_movements WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM stock_transfers WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM stock_balances WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
+}
+
+async function resetMasterData() {
+  await resetLedger()
+  await sql`DELETE FROM item_unit_conversions WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
+  await sql`DELETE FROM items WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
+  await sql`DELETE FROM units WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
+  await sql`DELETE FROM item_categories WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
+
+  await db.insert(units).values([
+    { id: PCS_UNIT_ID, companyId: COMPANY_ID, code: 'PCS', name: 'Pieces' },
+    { id: KARTON_UNIT_ID, companyId: COMPANY_ID, code: 'KARTON', name: 'Karton' },
+  ])
+
+  await db.insert(items).values([
+    { id: ITEM_A_ID, companyId: COMPANY_ID, sku: 'INV-ROUTE-A', name: 'Inventory Route A', baseUnitId: PCS_UNIT_ID },
+    { id: ITEM_B_ID, companyId: COMPANY_ID, sku: 'INV-ROUTE-B', name: 'Inventory Route B', baseUnitId: PCS_UNIT_ID },
+    { id: ITEM_C_ID, companyId: COMPANY_ID, sku: 'INV-ROUTE-C', name: 'Inventory Route C', baseUnitId: PCS_UNIT_ID },
+  ])
+
+  await db.insert(itemUnitConversions).values({
+    companyId: COMPANY_ID,
+    itemId: ITEM_A_ID,
+    fromUnitId: KARTON_UNIT_ID,
+    factorToBase: '24',
+  })
 }
 
 async function insertPermissionCatalog() {
@@ -743,5 +771,222 @@ describe('INV-CORE routes — RBAC and reads', () => {
     expect(body.meta).toEqual({ page: 1, page_size: 2, total: 3 })
     const movementRows = body.data as unknown as Array<{ ref_no: string }>
     expect(movementRows.map((row) => row.ref_no)).toEqual(['NEW', 'MID'])
+  })
+})
+
+describe('INV-CORE master-data routes', () => {
+  beforeEach(async () => {
+    await resetMasterData()
+  })
+
+  it('POST /units, /categories, and /items create master data and ignore client company_id', async () => {
+    const unitResponse = await req('POST', '/api/v1/inventory/units', adminToken, {
+      code: 'PACK',
+      name: 'Pack',
+    })
+    expect(unitResponse.status).toBe(201)
+    expectSuccessEnvelope(unitResponse.body)
+    const unit = unitResponse.body.data as unknown as { id: string; company_id: string; code: string }
+    expect(unit).toMatchObject({ company_id: COMPANY_ID, code: 'PACK' })
+
+    const categoryResponse = await req('POST', '/api/v1/inventory/categories', adminToken, {
+      code: 'RAW',
+      name: 'Raw Material',
+    })
+    expect(categoryResponse.status).toBe(201)
+    expectSuccessEnvelope(categoryResponse.body)
+    const category = categoryResponse.body.data as unknown as { id: string; company_id: string; code: string }
+    expect(category).toMatchObject({ company_id: COMPANY_ID, code: 'RAW' })
+
+    const itemResponse = await req('POST', '/api/v1/inventory/items', adminToken, {
+      company_id: OTHER_COMPANY_ID,
+      created_by: OTHER_ACTOR_USER_ID,
+      sku: 'MD-HTTP-001',
+      name: 'Master Data HTTP Item',
+      category_id: category.id,
+      base_unit_id: unit.id,
+      pawoon_ref: 'PW-MD-001',
+    })
+    expect(itemResponse.status).toBe(201)
+    expectSuccessEnvelope(itemResponse.body)
+    const item = itemResponse.body.data as unknown as {
+      id: string
+      company_id: string
+      sku: string
+      category_id: string
+      base_unit_id: string
+    }
+    expect(item).toMatchObject({
+      company_id: COMPANY_ID,
+      sku: 'MD-HTTP-001',
+      category_id: category.id,
+      base_unit_id: unit.id,
+    })
+
+    const [row] = await db.select({ companyId: items.companyId }).from(items).where(eq(items.id, item.id)).limit(1)
+    expect(row.companyId).toBe(COMPANY_ID)
+  })
+
+  it('POST /items duplicate SKU returns 409 ERR_DUPLICATE', async () => {
+    const { status, body } = await req('POST', '/api/v1/inventory/items', adminToken, {
+      sku: 'INV-ROUTE-A',
+      name: 'Duplicate Route Item',
+      category_id: null,
+      base_unit_id: PCS_UNIT_ID,
+    })
+
+    expect(status).toBe(409)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('ERR_DUPLICATE')
+  })
+
+  it('PATCH /items/:id updates mutable item fields with item_manage', async () => {
+    const categoryResponse = await req('POST', '/api/v1/inventory/categories', adminToken, {
+      code: 'PATCH-CAT',
+      name: 'Patch Category',
+    })
+    const category = categoryResponse.body.data as unknown as { id: string }
+
+    const { status, body } = await req('PATCH', `/api/v1/inventory/items/${ITEM_B_ID}`, adminToken, {
+      name: 'Patched Route Item',
+      category_id: category.id,
+      is_active: false,
+    })
+
+    expect(status).toBe(200)
+    expectSuccessEnvelope(body)
+    const item = body.data as unknown as { id: string; name: string; category_id: string; is_active: boolean }
+    expect(item).toMatchObject({
+      id: ITEM_B_ID,
+      name: 'Patched Route Item',
+      category_id: category.id,
+      is_active: false,
+    })
+  })
+
+  it('POST /items/:id/units accepts string factor and GET /items/:id returns conversions', async () => {
+    const conversionResponse = await req('POST', `/api/v1/inventory/items/${ITEM_B_ID}/units`, adminToken, {
+      from_unit_id: KARTON_UNIT_ID,
+      factor_to_base: '12',
+    })
+    expect(conversionResponse.status).toBe(201)
+    expectSuccessEnvelope(conversionResponse.body)
+    const conversion = conversionResponse.body.data as unknown as {
+      item_id: string
+      from_unit_id: string
+      factor_to_base: string
+    }
+    expect(conversion).toMatchObject({
+      item_id: ITEM_B_ID,
+      from_unit_id: KARTON_UNIT_ID,
+      factor_to_base: '12.000000',
+    })
+
+    const detailResponse = await req('GET', `/api/v1/inventory/items/${ITEM_B_ID}`, readOnlyToken)
+    expect(detailResponse.status).toBe(200)
+    expectSuccessEnvelope(detailResponse.body)
+    const detail = detailResponse.body.data as unknown as {
+      item: { id: string }
+      conversions: Array<{ factor_to_base: string; from_unit_id: string }>
+    }
+    expect(detail.item.id).toBe(ITEM_B_ID)
+    expect(detail.conversions).toEqual([
+      expect.objectContaining({ from_unit_id: KARTON_UNIT_ID, factor_to_base: '12.000000' }),
+    ])
+  })
+
+  it('POST /items/:id/units rejects zero and negative factor as 422 ERR_VALIDATION', async () => {
+    for (const factor of ['0', '-5']) {
+      const { status, body } = await req('POST', `/api/v1/inventory/items/${ITEM_B_ID}/units`, adminToken, {
+        from_unit_id: KARTON_UNIT_ID,
+        factor_to_base: factor,
+      })
+
+      expect(status).toBe(422)
+      expect(body.success).toBe(false)
+      expect(body.error.code).toBe('ERR_VALIDATION')
+    }
+  })
+
+  it('POST /items/:id/units rejects numeric factor_to_base without coercion', async () => {
+    const { status, body } = await req('POST', `/api/v1/inventory/items/${ITEM_B_ID}/units`, adminToken, {
+      from_unit_id: KARTON_UNIT_ID,
+      factor_to_base: 2,
+    })
+
+    expect(status).toBe(422)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('ERR_VALIDATION')
+  })
+
+  it('GET master-data endpoints allow inventory.read and return pagination meta', async () => {
+    await req('POST', '/api/v1/inventory/categories', adminToken, {
+      code: 'READ-CAT',
+      name: 'Read Category',
+    })
+
+    const itemsResponse = await req('GET', '/api/v1/inventory/items?page=1&page_size=2', readOnlyToken)
+    expect(itemsResponse.status).toBe(200)
+    expectSuccessEnvelope(itemsResponse.body)
+    expect(itemsResponse.body.meta).toEqual({ page: 1, page_size: 2, total: 3 })
+    expect(itemsResponse.body.data).toHaveLength(2)
+
+    const unitsResponse = await req('GET', '/api/v1/inventory/units?page=1&page_size=1', readOnlyToken)
+    expect(unitsResponse.status).toBe(200)
+    expectSuccessEnvelope(unitsResponse.body)
+    expect(unitsResponse.body.meta).toEqual({ page: 1, page_size: 1, total: 2 })
+
+    const categoriesResponse = await req('GET', '/api/v1/inventory/categories', readOnlyToken)
+    expect(categoriesResponse.status).toBe(200)
+    expectSuccessEnvelope(categoriesResponse.body)
+    expect(categoriesResponse.body.meta).toEqual({ page: 1, page_size: 50, total: 1 })
+  })
+
+  it('POST master-data endpoints require inventory.item_manage and return 403 with read only token', async () => {
+    const itemDenied = await req('POST', '/api/v1/inventory/items', readOnlyToken, {
+      sku: 'DENIED-ITEM',
+      name: 'Denied Item',
+      base_unit_id: PCS_UNIT_ID,
+    })
+    const unitDenied = await req('POST', '/api/v1/inventory/units', readOnlyToken, {
+      code: 'DENIED-UNIT',
+      name: 'Denied Unit',
+    })
+    const categoryDenied = await req('POST', '/api/v1/inventory/categories', readOnlyToken, {
+      code: 'DENIED-CAT',
+      name: 'Denied Category',
+    })
+
+    for (const denied of [itemDenied, unitDenied, categoryDenied]) {
+      expect(denied.status).toBe(403)
+      expect(denied.body.success).toBe(false)
+      expect(denied.body.error.code).toBe('ERR_FORBIDDEN')
+    }
+  })
+
+  it('GET /items/:id for cross-company item returns 404 ERR_OUT_OF_SCOPE', async () => {
+    const [otherUnit] = await db
+      .insert(units)
+      .values({
+        companyId: OTHER_COMPANY_ID,
+        code: 'OTHER-PCS',
+        name: 'Other Pieces',
+      })
+      .returning({ id: units.id })
+    const [otherItem] = await db
+      .insert(items)
+      .values({
+        companyId: OTHER_COMPANY_ID,
+        sku: 'OTHER-ITEM',
+        name: 'Other Company Item',
+        baseUnitId: otherUnit.id,
+      })
+      .returning({ id: items.id })
+
+    const { status, body } = await req('GET', `/api/v1/inventory/items/${otherItem.id}`, adminToken)
+
+    expect(status).toBe(404)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('ERR_OUT_OF_SCOPE')
   })
 })
