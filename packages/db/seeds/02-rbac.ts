@@ -55,6 +55,8 @@ export const RBAC_PERMISSION_CATALOG: PermissionSeed[] = [
   { code: 'inventory.stock_out', description: 'Create stock-out entries' },
   { code: 'inventory.opname', description: 'Run inventory opname' },
   { code: 'inventory.waste', description: 'Record inventory waste' },
+  { code: 'inventory.transfer_send', description: 'Send inventory transfers between outlets' },
+  { code: 'inventory.transfer_receive', description: 'Receive inventory transfers between outlets' },
   { code: 'reports.read', description: 'Read reports' },
   { code: 'reports.submit', description: 'Submit reports' },
   { code: 'reports.validate', description: 'Validate reports' },
