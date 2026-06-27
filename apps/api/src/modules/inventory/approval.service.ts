@@ -1,4 +1,4 @@
-import { and, eq, sql as drizzleSql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql as drizzleSql } from 'drizzle-orm'
 import { pendingStockMovements, stockBalances, stockMovements } from '@egg-os/db'
 import { ERR } from '../../lib/errors'
 import type { Db } from '../../lib/db'
@@ -10,6 +10,7 @@ import {
   negateDecimal,
   normalizeDecimal,
   subtractBalanceIfSufficient,
+  visibleOutletIdsForPermission,
   type InventoryServiceContext,
 } from './service'
 
@@ -281,6 +282,87 @@ export async function finalizeApproval(db: Db, ctx: InventoryServiceContext, id:
       balance: balanceDto(balance),
     }
   })
+}
+
+export type ListApprovalsQuery = {
+  status?: 'pending' | 'validated' | 'finalized' | 'rejected'
+  movementType?: PendingMovementType
+  outletId?: string
+  page?: number
+  pageSize?: number
+}
+
+function pageOf(query: ListApprovalsQuery) {
+  return query.page && query.page > 0 ? query.page : 1
+}
+
+function pageSizeOf(query: ListApprovalsQuery) {
+  return query.pageSize && query.pageSize > 0 ? query.pageSize : 50
+}
+
+export async function listApprovals(db: Db, ctx: InventoryServiceContext, query: ListApprovalsQuery = {}) {
+  const page = pageOf(query)
+  const pageSize = pageSizeOf(query)
+  const visibleOutletIds = await visibleOutletIdsForPermission(db, ctx, 'inventory.read')
+
+  if (query.outletId && !visibleOutletIds.includes(query.outletId)) {
+    throw outOfScope()
+  }
+
+  if (visibleOutletIds.length === 0) {
+    return {
+      data: [],
+      meta: { page, page_size: pageSize, total: 0 },
+    }
+  }
+
+  const conditions = [
+    eq(pendingStockMovements.companyId, ctx.companyId),
+    inArray(pendingStockMovements.outletId, visibleOutletIds),
+  ]
+
+  if (query.status) conditions.push(eq(pendingStockMovements.status, query.status))
+  if (query.movementType) conditions.push(eq(pendingStockMovements.movementType, query.movementType))
+  if (query.outletId) conditions.push(eq(pendingStockMovements.outletId, query.outletId))
+
+  const [rows, countRows] = await Promise.all([
+    db
+      .select()
+      .from(pendingStockMovements)
+      .where(and(...conditions))
+      .orderBy(desc(pendingStockMovements.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    db
+      .select({ count: drizzleSql<number>`count(*)::int` })
+      .from(pendingStockMovements)
+      .where(and(...conditions)),
+  ])
+
+  return {
+    data: rows.map(pendingDto),
+    meta: {
+      page,
+      page_size: pageSize,
+      total: countRows[0]?.count ?? 0,
+    },
+  }
+}
+
+export async function getApproval(db: Db, ctx: InventoryServiceContext, id: string) {
+  const row = await db
+    .select()
+    .from(pendingStockMovements)
+    .where(and(eq(pendingStockMovements.id, id), eq(pendingStockMovements.companyId, ctx.companyId)))
+    .limit(1)
+    .then((rows) => rows[0] ?? null)
+
+  if (!row) throw outOfScope()
+
+  const visibleOutletIds = await visibleOutletIdsForPermission(db, ctx, 'inventory.read')
+  if (!visibleOutletIds.includes(row.outletId)) throw outOfScope()
+
+  return { pending: pendingDto(row) }
 }
 
 export async function rejectApproval(

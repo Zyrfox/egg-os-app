@@ -242,7 +242,7 @@ export async function assertOutletInScope(db: Db, ctx: InventoryServiceContext, 
   if (!outletVisibleWithScopes(scopes, permission, outletId, orgTree)) throw outOfScope()
 }
 
-async function visibleOutletIdsForPermission(db: Db, ctx: InventoryServiceContext, permission: string) {
+export async function visibleOutletIdsForPermission(db: Db, ctx: InventoryServiceContext, permission: string) {
   const orgTree = await buildOrgTree(db, ctx.companyId)
   const scopes = permissionScopes(ctx, permission)
   if (scopes.length === 0) return []

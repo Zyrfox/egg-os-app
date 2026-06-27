@@ -9,6 +9,7 @@ import {
   itemUnitConversions,
   items,
   outlets,
+  pendingStockMovements,
   permissions,
   rolePermissions,
   roles,
@@ -44,10 +45,12 @@ const ADMIN_USER_ID = '96000000-0000-4000-8000-000000000008'
 const READ_ONLY_USER_ID = '96000000-0000-4000-8000-000000000009'
 const OTHER_ACTOR_USER_ID = '96000000-0000-4000-8000-000000000010'
 const RECEIVER_USER_ID = '96000000-0000-4000-8000-000000000012'
+const APPROVER_USER_ID = '96000000-0000-4000-8000-000000000013'
 
 const ADMIN_ROLE_ID = '96100000-0000-4000-8000-000000000001'
 const READ_ONLY_ROLE_ID = '96100000-0000-4000-8000-000000000002'
 const RECEIVER_ROLE_ID = '96100000-0000-4000-8000-000000000003'
+const APPROVER_ROLE_ID = '96100000-0000-4000-8000-000000000004'
 
 const PCS_UNIT_ID = '96200000-0000-4000-8000-000000000001'
 const KARTON_UNIT_ID = '96200000-0000-4000-8000-000000000002'
@@ -64,12 +67,23 @@ const permissionCodes = [
   'inventory.item_manage',
   'inventory.transfer_send',
   'inventory.transfer_receive',
+  'inventory.approval_submit',
+  'inventory.approval_validate',
+  'inventory.approval_finalize',
+]
+
+const approverPermissionCodes = [
+  'inventory.read',
+  'inventory.approval_submit',
+  'inventory.approval_validate',
+  'inventory.approval_finalize',
 ]
 
 const permissionIds = new Map<string, string>()
 let adminToken = ''
 let readOnlyToken = ''
 let receiverToken = ''
+let approverToken = ''
 
 async function req(method: string, path: string, token?: string, body?: unknown): Promise<{ status: number; body: TestResponseBody }> {
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
@@ -100,6 +114,7 @@ async function tokenFor(userId: string) {
 }
 
 async function cleanupFixtures() {
+  await sql`DELETE FROM pending_stock_movements WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM stock_movements WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM stock_transfers WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM stock_balances WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
@@ -118,6 +133,7 @@ async function cleanupFixtures() {
 }
 
 async function resetLedger() {
+  await sql`DELETE FROM pending_stock_movements WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM stock_movements WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM stock_transfers WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
   await sql`DELETE FROM stock_balances WHERE company_id IN (${COMPANY_ID}, ${OTHER_COMPANY_ID})`
@@ -251,17 +267,27 @@ async function seedFixtures() {
       status: 'active',
       firstLoginRequired: false,
     },
+    {
+      id: APPROVER_USER_ID,
+      companyId: COMPANY_ID,
+      email: 'inventory-routes-approver@egg.test',
+      fullName: 'Inventory Routes Approver',
+      status: 'active',
+      firstLoginRequired: false,
+    },
   ])
 
   await db.insert(roles).values([
     { id: ADMIN_ROLE_ID, companyId: COMPANY_ID, code: 'INV_ROUTE_ADMIN', name: 'Inventory Route Admin', defaultScopeType: 'outlet', isSystem: false },
     { id: READ_ONLY_ROLE_ID, companyId: COMPANY_ID, code: 'INV_ROUTE_READ_ONLY', name: 'Inventory Route Read Only', defaultScopeType: 'outlet', isSystem: false },
     { id: RECEIVER_ROLE_ID, companyId: COMPANY_ID, code: 'INV_ROUTE_RECEIVER', name: 'Inventory Route Receiver', defaultScopeType: 'outlet', isSystem: false },
+    { id: APPROVER_ROLE_ID, companyId: COMPANY_ID, code: 'INV_ROUTE_APPROVER', name: 'Inventory Route Approver', defaultScopeType: 'outlet', isSystem: false },
   ])
 
   await assignPermissions(ADMIN_ROLE_ID, permissionCodes)
   await assignPermissions(READ_ONLY_ROLE_ID, ['inventory.read'])
   await assignPermissions(RECEIVER_ROLE_ID, ['inventory.transfer_receive'])
+  await assignPermissions(APPROVER_ROLE_ID, approverPermissionCodes)
 
   await db.insert(userRoles).values([
     {
@@ -275,6 +301,14 @@ async function seedFixtures() {
     {
       userId: READ_ONLY_USER_ID,
       roleId: READ_ONLY_ROLE_ID,
+      companyId: COMPANY_ID,
+      scopeType: 'outlet',
+      scopeId: OUTLET_A_ID,
+      grantedBy: ADMIN_USER_ID,
+    },
+    {
+      userId: APPROVER_USER_ID,
+      roleId: APPROVER_ROLE_ID,
       companyId: COMPANY_ID,
       scopeType: 'outlet',
       scopeId: OUTLET_A_ID,
@@ -380,6 +414,7 @@ beforeAll(async () => {
   adminToken = await tokenFor(ADMIN_USER_ID)
   readOnlyToken = await tokenFor(READ_ONLY_USER_ID)
   receiverToken = await tokenFor(RECEIVER_USER_ID)
+  approverToken = await tokenFor(APPROVER_USER_ID)
 })
 
 beforeEach(async () => {
@@ -434,53 +469,6 @@ describe('INV-CORE routes — write operations', () => {
     expect(movement.movement_type).toBe('stock_out')
     expect(movement.qty_base).toBe('-4.000000')
     expect(balance.qty_base).toBe('6.000000')
-  })
-
-  it('POST /waste decrements balance and returns movement envelope', async () => {
-    await db.insert(stockBalances).values({
-      companyId: COMPANY_ID,
-      itemId: ITEM_A_ID,
-      outletId: OUTLET_A_ID,
-      qtyBase: '8.000000',
-    })
-
-    const { status, body } = await req('POST', '/api/v1/inventory/waste', adminToken, {
-      item_id: ITEM_A_ID,
-      outlet_id: OUTLET_A_ID,
-      qty: '3',
-      unit_id: PCS_UNIT_ID,
-      reason: 'route waste',
-    })
-
-    expect(status).toBe(201)
-    expectSuccessEnvelope(body)
-    const movement = body.data.movement as { movement_type: string; qty_base: string }
-    expect(movement.movement_type).toBe('waste')
-    expect(movement.qty_base).toBe('-3.000000')
-  })
-
-  it('POST /opname accepts counted_qty "0" and records negative delta', async () => {
-    await db.insert(stockBalances).values({
-      companyId: COMPANY_ID,
-      itemId: ITEM_A_ID,
-      outletId: OUTLET_A_ID,
-      qtyBase: '5.000000',
-    })
-
-    const { status, body } = await req('POST', '/api/v1/inventory/opname', adminToken, {
-      item_id: ITEM_A_ID,
-      outlet_id: OUTLET_A_ID,
-      counted_qty: '0',
-      unit_id: PCS_UNIT_ID,
-    })
-
-    expect(status).toBe(201)
-    expectSuccessEnvelope(body)
-    const movement = body.data.movement as { movement_type: string; qty_base: string }
-    const balance = body.data.balance as { qty_base: string }
-    expect(movement.movement_type).toBe('opname')
-    expect(movement.qty_base).toBe('-5.000000')
-    expect(balance.qty_base).toBe('0.000000')
   })
 
   it('stock-out over balance returns 422 ERR_INSUFFICIENT_STOCK', async () => {
@@ -679,6 +667,230 @@ describe('INV-FLOW transfer routes', () => {
 
     expect(await movementRows()).toHaveLength(0)
     expect(await transferRows()).toHaveLength(0)
+  })
+})
+
+describe('INV-APPROVAL routes', () => {
+  async function submitOpnamePending(counted = '3', unitId = PCS_UNIT_ID) {
+    await db.insert(stockBalances).values({
+      companyId: COMPANY_ID,
+      itemId: ITEM_A_ID,
+      outletId: OUTLET_A_ID,
+      qtyBase: '20.000000',
+    })
+    const { status, body } = await req('POST', '/api/v1/inventory/opname/submit', adminToken, {
+      item_id: ITEM_A_ID,
+      outlet_id: OUTLET_A_ID,
+      counted_qty: counted,
+      unit_id: unitId,
+      reason: 'route opname submit',
+    })
+    expect(status).toBe(201)
+    expectSuccessEnvelope(body)
+    return body.data.pending as { id: string; status: string; qty_base: string; submitted_by: string }
+  }
+
+  async function submitWastePending(qty = '5') {
+    await db.insert(stockBalances).values({
+      companyId: COMPANY_ID,
+      itemId: ITEM_A_ID,
+      outletId: OUTLET_A_ID,
+      qtyBase: '20.000000',
+    })
+    const { status, body } = await req('POST', '/api/v1/inventory/waste/submit', adminToken, {
+      item_id: ITEM_A_ID,
+      outlet_id: OUTLET_A_ID,
+      qty,
+      unit_id: PCS_UNIT_ID,
+      reason: 'route waste submit',
+    })
+    expect(status).toBe(201)
+    expectSuccessEnvelope(body)
+    return body.data.pending as { id: string; status: string; qty_base: string; submitted_by: string }
+  }
+
+  it('POST /opname/submit creates pending row, locks qty_base, and does not change balance or ledger', async () => {
+    const pending = await submitOpnamePending('5', PCS_UNIT_ID)
+
+    expect(pending.status).toBe('pending')
+    expect(pending.submitted_by).toBe(ADMIN_USER_ID)
+    expect(pending.qty_base).toBe('5.000000')
+    expect(await movementRows()).toHaveLength(0)
+    expect(await balanceQty(OUTLET_A_ID)).toBe('20.000000')
+  })
+
+  it('POST /waste/submit creates pending row and does not change balance', async () => {
+    const pending = await submitWastePending('5')
+
+    expect(pending.status).toBe('pending')
+    expect(pending.qty_base).toBe('5.000000')
+    expect(await movementRows()).toHaveLength(0)
+    expect(await balanceQty(OUTLET_A_ID)).toBe('20.000000')
+  })
+
+  it('POST /approvals/:id/validate by approver (different actor) returns 200 and validated', async () => {
+    const pending = await submitWastePending('5')
+
+    const { status, body } = await req('POST', `/api/v1/inventory/approvals/${pending.id}/validate`, approverToken)
+
+    expect(status).toBe(200)
+    expectSuccessEnvelope(body)
+    const updated = body.data.pending as { status: string; validated_by: string }
+    expect(updated.status).toBe('validated')
+    expect(updated.validated_by).toBe(APPROVER_USER_ID)
+    expect(await balanceQty(OUTLET_A_ID)).toBe('20.000000')
+  })
+
+  it('POST /approvals/:id/validate by submitter (self) returns 403 ERR_SELF_APPROVAL', async () => {
+    const pending = await submitWastePending('5')
+
+    const { status, body } = await req('POST', `/api/v1/inventory/approvals/${pending.id}/validate`, adminToken)
+
+    expect(status).toBe(403)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('ERR_SELF_APPROVAL')
+  })
+
+  it('POST /approvals/:id/finalize on validated waste decrements balance and links movement', async () => {
+    const pending = await submitWastePending('5')
+    await req('POST', `/api/v1/inventory/approvals/${pending.id}/validate`, approverToken)
+
+    const { status, body } = await req('POST', `/api/v1/inventory/approvals/${pending.id}/finalize`, approverToken)
+
+    expect(status).toBe(200)
+    expectSuccessEnvelope(body)
+    const result = body.data as unknown as {
+      pending: { status: string; finalized_by: string; finalized_movement_id: string }
+      movement: { movement_type: string; qty_base: string; id: string }
+      balance: { qty_base: string }
+    }
+    expect(result.pending.status).toBe('finalized')
+    expect(result.pending.finalized_by).toBe(APPROVER_USER_ID)
+    expect(result.pending.finalized_movement_id).toBe(result.movement.id)
+    expect(result.movement.movement_type).toBe('waste')
+    expect(result.movement.qty_base).toBe('-5.000000')
+    expect(result.balance.qty_base).toBe('15.000000')
+    expect(await balanceQty(OUTLET_A_ID)).toBe('15.000000')
+  })
+
+  it('POST /approvals/:id/finalize by submitter (self) returns 403 ERR_SELF_APPROVAL and keeps status validated', async () => {
+    const pending = await submitWastePending('5')
+    await req('POST', `/api/v1/inventory/approvals/${pending.id}/validate`, approverToken)
+
+    const { status, body } = await req('POST', `/api/v1/inventory/approvals/${pending.id}/finalize`, adminToken)
+
+    expect(status).toBe(403)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('ERR_SELF_APPROVAL')
+    expect(await movementRows()).toHaveLength(0)
+    expect(await balanceQty(OUTLET_A_ID)).toBe('20.000000')
+  })
+
+  it('POST /approvals/:id/finalize on waste with depleted balance returns 422 ERR_INSUFFICIENT_STOCK and keeps status validated', async () => {
+    const pending = await submitWastePending('15')
+    await req('POST', `/api/v1/inventory/approvals/${pending.id}/validate`, approverToken)
+    await sql`UPDATE stock_balances SET qty_base = '5.000000' WHERE item_id = ${ITEM_A_ID} AND outlet_id = ${OUTLET_A_ID}`
+
+    const { status, body } = await req('POST', `/api/v1/inventory/approvals/${pending.id}/finalize`, approverToken)
+
+    expect(status).toBe(422)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('ERR_INSUFFICIENT_STOCK')
+
+    const detail = await req('GET', `/api/v1/inventory/approvals/${pending.id}`, adminToken)
+    expect(detail.status).toBe(200)
+    expect((detail.body.data.pending as { status: string }).status).toBe('validated')
+    expect(await movementRows()).toHaveLength(0)
+    expect(await balanceQty(OUTLET_A_ID)).toBe('5.000000')
+  })
+
+  it('POST /approvals/:id/reject from pending returns 200 and rejected', async () => {
+    const pending = await submitWastePending('5')
+
+    const { status, body } = await req(
+      'POST',
+      `/api/v1/inventory/approvals/${pending.id}/reject`,
+      approverToken,
+      { reason: 'salah input' },
+    )
+
+    expect(status).toBe(200)
+    expectSuccessEnvelope(body)
+    const updated = body.data.pending as { status: string; rejected_by: string; reject_reason: string }
+    expect(updated.status).toBe('rejected')
+    expect(updated.rejected_by).toBe(APPROVER_USER_ID)
+    expect(updated.reject_reason).toBe('salah input')
+  })
+
+  it('readOnly token cannot submit (no approval_submit) or finalize (no approval_finalize)', async () => {
+    const submitDenied = await req('POST', '/api/v1/inventory/waste/submit', readOnlyToken, {
+      item_id: ITEM_A_ID,
+      outlet_id: OUTLET_A_ID,
+      qty: '1',
+      unit_id: PCS_UNIT_ID,
+    })
+    expect(submitDenied.status).toBe(403)
+    expect(submitDenied.body.error.code).toBe('ERR_FORBIDDEN')
+
+    const pending = await submitWastePending('3')
+    await req('POST', `/api/v1/inventory/approvals/${pending.id}/validate`, approverToken)
+    const finalizeDenied = await req('POST', `/api/v1/inventory/approvals/${pending.id}/finalize`, readOnlyToken)
+    expect(finalizeDenied.status).toBe(403)
+    expect(finalizeDenied.body.error.code).toBe('ERR_FORBIDDEN')
+  })
+
+  it('GET /approvals returns paginated meta and rows visible to the actor', async () => {
+    await db.insert(stockBalances).values({
+      companyId: COMPANY_ID,
+      itemId: ITEM_A_ID,
+      outletId: OUTLET_A_ID,
+      qtyBase: '20.000000',
+    })
+    for (const qty of ['1', '2']) {
+      const submitRes = await req('POST', '/api/v1/inventory/waste/submit', adminToken, {
+        item_id: ITEM_A_ID,
+        outlet_id: OUTLET_A_ID,
+        qty,
+        unit_id: PCS_UNIT_ID,
+      })
+      expect(submitRes.status).toBe(201)
+    }
+
+    const { status, body } = await req('GET', '/api/v1/inventory/approvals?page=1&page_size=1', adminToken)
+
+    expect(status).toBe(200)
+    expectSuccessEnvelope(body)
+    expect(body.meta).toEqual({ page: 1, page_size: 1, total: 2 })
+    expect(body.data).toHaveLength(1)
+  })
+
+  it('GET /approvals/:id for cross-company row returns 404 ERR_OUT_OF_SCOPE', async () => {
+    const otherCompanyItemId = '96300000-0000-4000-8000-000000000099'
+    const otherCompanyUnitId = '96200000-0000-4000-8000-000000000099'
+    await db.insert(units).values({ id: otherCompanyUnitId, companyId: OTHER_COMPANY_ID, code: 'OTH-PCS', name: 'Other Pieces' })
+    await db.insert(items).values({ id: otherCompanyItemId, companyId: OTHER_COMPANY_ID, sku: 'OTH-INV-1', name: 'Other Item', baseUnitId: otherCompanyUnitId })
+
+    const otherRows = await db
+      .insert(pendingStockMovements)
+      .values({
+        companyId: OTHER_COMPANY_ID,
+        itemId: otherCompanyItemId,
+        outletId: OTHER_OUTLET_ID,
+        movementType: 'waste',
+        inputQty: '5.000000',
+        inputUnitId: otherCompanyUnitId,
+        qtyBase: '5.000000',
+        reason: 'cross-company',
+        status: 'pending',
+        submittedBy: OTHER_ACTOR_USER_ID,
+      })
+      .returning({ id: pendingStockMovements.id })
+
+    const { status, body } = await req('GET', `/api/v1/inventory/approvals/${otherRows[0].id}`, adminToken)
+
+    expect(status).toBe(404)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('ERR_OUT_OF_SCOPE')
   })
 })
 

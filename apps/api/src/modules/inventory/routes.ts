@@ -2,18 +2,22 @@ import { Hono, type Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import {
   AddConversionReq,
+  ApprovalParams,
   CreateCategoryReq,
   CreateItemReq,
   CreateUnitReq,
   InventoryBalanceQuery,
   InventoryMovementQuery,
   InventoryMovementReq,
-  InventoryOpnameReq,
   InventoryTransferCreateReq,
   InventoryTransferReceiveParams,
+  ListApprovalsQuery,
   ListCategoriesQuery,
   ListItemsQuery,
   ListUnitsQuery,
+  RejectApprovalReq,
+  SubmitOpnameApprovalReq,
+  SubmitWasteApprovalReq,
   UpdateItemReq,
   z,
 } from '@egg-os/validation'
@@ -23,10 +27,8 @@ import { authMiddleware } from '../../middleware/auth'
 import type { Env } from '../../types'
 import { requirePermission, type RbacVariables } from '../rbac/middleware'
 import {
-  createOpname,
   createStockIn,
   createStockOut,
-  createWaste,
   getBalances,
   getMovements,
   InventoryServiceError,
@@ -44,6 +46,14 @@ import {
   updateItem,
 } from './master-data.service'
 import { createTransfer, receiveTransfer } from './transfer.service'
+import {
+  finalizeApproval,
+  getApproval,
+  listApprovals,
+  rejectApproval,
+  submitApproval,
+  validateApproval,
+} from './approval.service'
 
 type InventoryContext = Context<{ Bindings: Env; Variables: RbacVariables }>
 
@@ -285,30 +295,111 @@ inventory.post('/stock-out', authMiddleware, requirePermission('inventory.stock_
   }
 })
 
-inventory.post('/waste', authMiddleware, requirePermission('inventory.waste'), async (c) => {
+inventory.post('/opname/submit', authMiddleware, requirePermission('inventory.approval_submit'), async (c) => {
   const body = await parseJson(c)
-  const parsed = InventoryMovementReq.safeParse(body)
+  const parsed = SubmitOpnameApprovalReq.safeParse(body)
   if (!parsed.success) return validationResponse(c, parsed.error)
 
   const db = createDb(c.env.DATABASE_URL)
 
   try {
-    return c.json(okResponse(await createWaste(db, serviceCtx(c), parsed.data)), 201)
+    return c.json(
+      okResponse(await submitApproval(db, serviceCtx(c), { movementType: 'opname', ...parsed.data })),
+      201,
+    )
   } catch (error) {
     if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
     throw error
   }
 })
 
-inventory.post('/opname', authMiddleware, requirePermission('inventory.opname'), async (c) => {
+inventory.post('/waste/submit', authMiddleware, requirePermission('inventory.approval_submit'), async (c) => {
   const body = await parseJson(c)
-  const parsed = InventoryOpnameReq.safeParse(body)
+  const parsed = SubmitWasteApprovalReq.safeParse(body)
   if (!parsed.success) return validationResponse(c, parsed.error)
 
   const db = createDb(c.env.DATABASE_URL)
 
   try {
-    return c.json(okResponse(await createOpname(db, serviceCtx(c), parsed.data)), 201)
+    return c.json(
+      okResponse(await submitApproval(db, serviceCtx(c), { movementType: 'waste', ...parsed.data })),
+      201,
+    )
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.get('/approvals', authMiddleware, requirePermission('inventory.read'), async (c) => {
+  const parsed = ListApprovalsQuery.safeParse(c.req.query())
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    const result = await listApprovals(db, serviceCtx(c), parsed.data)
+    return c.json(okResponse(result.data, result.meta), 200)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.get('/approvals/:id', authMiddleware, requirePermission('inventory.read'), async (c) => {
+  const parsed = ApprovalParams.safeParse(c.req.param())
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await getApproval(db, serviceCtx(c), parsed.data.id)), 200)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.post('/approvals/:id/validate', authMiddleware, requirePermission('inventory.approval_validate'), async (c) => {
+  const parsed = ApprovalParams.safeParse(c.req.param())
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await validateApproval(db, serviceCtx(c), parsed.data.id)), 200)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.post('/approvals/:id/finalize', authMiddleware, requirePermission('inventory.approval_finalize'), async (c) => {
+  const parsed = ApprovalParams.safeParse(c.req.param())
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await finalizeApproval(db, serviceCtx(c), parsed.data.id)), 200)
+  } catch (error) {
+    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    throw error
+  }
+})
+
+inventory.post('/approvals/:id/reject', authMiddleware, requirePermission('inventory.approval_validate'), async (c) => {
+  const params = ApprovalParams.safeParse(c.req.param())
+  if (!params.success) return validationResponse(c, params.error)
+
+  const body = await parseJson(c)
+  const parsed = RejectApprovalReq.safeParse(body ?? {})
+  if (!parsed.success) return validationResponse(c, parsed.error)
+
+  const db = createDb(c.env.DATABASE_URL)
+
+  try {
+    return c.json(okResponse(await rejectApproval(db, serviceCtx(c), params.data.id, parsed.data.reason)), 200)
   } catch (error) {
     if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
     throw error

@@ -149,6 +149,66 @@ export const InventoryTransferReceiveParams = z.object({
   id: z.string().uuid(),
 })
 
+export const SubmitOpnameApprovalReq = z
+  .object({
+    item_id: z.string().uuid(),
+    outlet_id: z.string().uuid(),
+    counted_qty: DecimalString,
+    unit_id: z.string().uuid(),
+    reason: NullableText,
+  })
+  .transform((value) => ({
+    itemId: value.item_id,
+    outletId: value.outlet_id,
+    qty: value.counted_qty,
+    unitId: value.unit_id,
+    reason: value.reason,
+  }))
+
+export const SubmitWasteApprovalReq = z
+  .object({
+    item_id: z.string().uuid(),
+    outlet_id: z.string().uuid(),
+    qty: DecimalString,
+    unit_id: z.string().uuid(),
+    reason: NullableText,
+  })
+  .transform((value) => ({
+    itemId: value.item_id,
+    outletId: value.outlet_id,
+    qty: value.qty,
+    unitId: value.unit_id,
+    reason: value.reason,
+  }))
+
+export const ApprovalParams = z.object({
+  id: z.string().uuid(),
+})
+
+export const RejectApprovalReq = z
+  .object({
+    reason: z.string().max(500).nullable().optional(),
+  })
+  .transform((value) => ({
+    reason: value.reason ?? null,
+  }))
+
+export const ListApprovalsQuery = z
+  .object({
+    status: z.enum(['pending', 'validated', 'finalized', 'rejected']).optional(),
+    movement_type: z.enum(['opname', 'waste']).optional(),
+    outlet_id: z.string().uuid().optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    page_size: z.coerce.number().int().min(1).max(100).default(50),
+  })
+  .transform((value) => ({
+    status: value.status,
+    movementType: value.movement_type,
+    outletId: value.outlet_id,
+    page: value.page,
+    pageSize: value.page_size,
+  }))
+
 export const InventoryBalanceQuery = z
   .object({
     outlet_id: z.string().uuid().optional(),
@@ -191,6 +251,11 @@ export type InventoryTransferCreateInput = z.infer<typeof InventoryTransferCreat
 export type InventoryTransferReceiveParamsInput = z.infer<typeof InventoryTransferReceiveParams>
 export type InventoryBalanceQueryInput = z.infer<typeof InventoryBalanceQuery>
 export type InventoryMovementQueryInput = z.infer<typeof InventoryMovementQuery>
+export type SubmitOpnameApprovalInput = z.infer<typeof SubmitOpnameApprovalReq>
+export type SubmitWasteApprovalInput = z.infer<typeof SubmitWasteApprovalReq>
+export type ApprovalParamsInput = z.infer<typeof ApprovalParams>
+export type RejectApprovalInput = z.infer<typeof RejectApprovalReq>
+export type ListApprovalsQueryInput = z.infer<typeof ListApprovalsQuery>
 export type CreateItemInput = z.infer<typeof CreateItemReq>
 export type UpdateItemInput = z.infer<typeof UpdateItemReq>
 export type AddConversionInput = z.infer<typeof AddConversionReq>
