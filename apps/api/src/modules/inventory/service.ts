@@ -319,7 +319,7 @@ export async function subtractBalanceIfSufficient(
   return balance
 }
 
-async function lockBalanceRow(db: Db, ctx: InventoryServiceContext, itemId: string, outletId: string) {
+export async function lockBalanceRow(db: Db, ctx: InventoryServiceContext, itemId: string, outletId: string) {
   await db
     .insert(stockBalances)
     .values({
