@@ -3,10 +3,10 @@ import { pendingStockMovements, stockBalances, stockMovements } from '@egg-os/db
 import { ERR } from '../../lib/errors'
 import type { Db } from '../../lib/db'
 import {
+  applyOpnameToLedger,
   assertOutletInScope,
   convertToBaseUnit,
   InventoryServiceError,
-  lockBalanceRow,
   negateDecimal,
   normalizeDecimal,
   subtractBalanceIfSufficient,
@@ -226,35 +226,14 @@ export async function finalizeApproval(db: Db, ctx: InventoryServiceContext, id:
         })
         .returning()
     } else {
-      const currentBase = await lockBalanceRow(txDb, ctx, row.itemId, row.outletId)
-
-      ;[movement] = await txDb
-        .insert(stockMovements)
-        .values({
-          companyId: ctx.companyId,
-          itemId: row.itemId,
-          outletId: row.outletId,
-          movementType: 'opname',
-          qtyBase: drizzleSql`(${row.qtyBase}::numeric(18, 6) - ${currentBase}::numeric(18, 6))::numeric(18, 6)`,
-          inputQty: row.inputQty,
-          inputUnitId: row.inputUnitId,
-          reason: row.reason ?? 'stock opname',
-          refNo: null,
-          createdBy: ctx.actorUserId,
-        })
-        .returning()
-
-      ;[balance] = await txDb
-        .update(stockBalances)
-        .set({ qtyBase: row.qtyBase, updatedAt: new Date() })
-        .where(
-          and(
-            eq(stockBalances.companyId, ctx.companyId),
-            eq(stockBalances.itemId, row.itemId),
-            eq(stockBalances.outletId, row.outletId),
-          ),
-        )
-        .returning()
+      ;({ movement, balance } = await applyOpnameToLedger(txDb, ctx, {
+        itemId: row.itemId,
+        outletId: row.outletId,
+        countedBase: row.qtyBase,
+        inputQty: row.inputQty,
+        inputUnitId: row.inputUnitId,
+        reason: row.reason,
+      }))
     }
 
     const [updated] = await txDb

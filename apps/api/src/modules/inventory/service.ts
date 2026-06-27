@@ -467,6 +467,54 @@ export async function createWaste(db: Db, ctx: InventoryServiceContext, input: M
   return createNegativeMovement(db, ctx, input, 'waste', 'inventory.waste')
 }
 
+export async function applyOpnameToLedger(
+  db: Db,
+  ctx: InventoryServiceContext,
+  input: {
+    itemId: string
+    outletId: string
+    countedBase: string
+    inputQty: string
+    inputUnitId: string
+    reason: string | null
+  }
+): Promise<{ movement: StockMovementRow; balance: StockBalanceRow }> {
+  const currentBase = await lockBalanceRow(db, ctx, input.itemId, input.outletId)
+
+  const [movement] = await db
+    .insert(stockMovements)
+    .values({
+      companyId: ctx.companyId,
+      itemId: input.itemId,
+      outletId: input.outletId,
+      movementType: 'opname',
+      qtyBase: drizzleSql`(${input.countedBase}::numeric(18, 6) - ${currentBase}::numeric(18, 6))::numeric(18, 6)`,
+      inputQty: input.inputQty,
+      inputUnitId: input.inputUnitId,
+      reason: input.reason ?? 'stock opname',
+      refNo: null,
+      createdBy: ctx.actorUserId,
+    })
+    .returning()
+
+  const [balance] = await db
+    .update(stockBalances)
+    .set({
+      qtyBase: input.countedBase,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(stockBalances.companyId, ctx.companyId),
+        eq(stockBalances.itemId, input.itemId),
+        eq(stockBalances.outletId, input.outletId)
+      )
+    )
+    .returning()
+
+  return { movement, balance }
+}
+
 export async function createOpname(db: Db, ctx: InventoryServiceContext, input: OpnameInput) {
   return db.transaction(async (tx) => {
     // Drizzle's transaction type is structurally compatible with Db but not exported as the same alias.
@@ -478,38 +526,14 @@ export async function createOpname(db: Db, ctx: InventoryServiceContext, input: 
     ])
 
     await assertOutletInScope(txDb, ctx, input.outletId, 'inventory.opname')
-    const currentBase = await lockBalanceRow(txDb, ctx, input.itemId, input.outletId)
-
-    const [movement] = await txDb
-      .insert(stockMovements)
-      .values({
-        companyId: ctx.companyId,
-        itemId: input.itemId,
-        outletId: input.outletId,
-        movementType: 'opname',
-        qtyBase: drizzleSql`(${countedBase}::numeric(18, 6) - ${currentBase}::numeric(18, 6))::numeric(18, 6)`,
-        inputQty: countedQty,
-        inputUnitId: input.unitId,
-        reason: input.reason ?? 'stock opname',
-        refNo: null,
-        createdBy: ctx.actorUserId,
-      })
-      .returning()
-
-    const [balance] = await txDb
-      .update(stockBalances)
-      .set({
-        qtyBase: countedBase,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(stockBalances.companyId, ctx.companyId),
-          eq(stockBalances.itemId, input.itemId),
-          eq(stockBalances.outletId, input.outletId)
-        )
-      )
-      .returning()
+    const { movement, balance } = await applyOpnameToLedger(txDb, ctx, {
+      itemId: input.itemId,
+      outletId: input.outletId,
+      countedBase,
+      inputQty: countedQty,
+      inputUnitId: input.unitId,
+      reason: input.reason ?? null,
+    })
 
     return inventoryResult(movement, balance)
   })
