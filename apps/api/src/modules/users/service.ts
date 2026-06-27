@@ -89,7 +89,7 @@ function forbidden(message: string = ERR.FORBIDDEN.message) {
 }
 
 function outOfScope() {
-  return new UsersServiceError(404, 'ERR_OUT_OF_SCOPE', 'Data di luar cakupan Anda')
+  return new UsersServiceError(ERR.OUT_OF_SCOPE.http, ERR.OUT_OF_SCOPE.code, ERR.OUT_OF_SCOPE.message)
 }
 
 function validation(details: ErrorDetail[]) {

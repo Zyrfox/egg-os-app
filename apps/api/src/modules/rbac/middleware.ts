@@ -35,7 +35,7 @@ export type PermissionTargetResolver = (c: RbacContext) => ScopeRef | null
 const rowLevelScopeTypes = new Set(['own', 'assigned'])
 
 function outOfScopeResponse() {
-  return errResponse('ERR_OUT_OF_SCOPE', 'Data di luar cakupan Anda')
+  return errResponse(ERR.OUT_OF_SCOPE.code, ERR.OUT_OF_SCOPE.message)
 }
 
 function buildAccessFilter(access: ResolvedAccess, permission: string): AccessFilter {
