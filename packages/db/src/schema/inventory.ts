@@ -22,6 +22,8 @@ const auditColumns = {
 
 const movementTypes = sql`('stock_in', 'stock_out', 'opname', 'waste', 'transfer_in', 'transfer_out')`
 const transferStatuses = sql`('pending', 'received')`
+const pendingMovementTypes = sql`('opname', 'waste')`
+const pendingMovementStatuses = sql`('pending', 'validated', 'finalized', 'rejected')`
 
 export const itemCategories = pgTable('item_categories', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
@@ -109,6 +111,37 @@ export const stockBalances = pgTable('stock_balances', {
 }, (t) => ({
   itemOutletUq: uniqueIndex('stock_balances_item_outlet_uq').on(t.itemId, t.outletId),
   outletIdx: index('stock_balances_outlet_idx').on(t.outletId),
+}))
+
+export const pendingStockMovements = pgTable('pending_stock_movements', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid('company_id').notNull().references(() => companies.id),
+  itemId: uuid('item_id').notNull().references(() => items.id),
+  outletId: uuid('outlet_id').notNull().references(() => outlets.id),
+  movementType: varchar('movement_type', { length: 20 }).notNull(),
+  inputQty: numeric('input_qty', { precision: 18, scale: 6 }).notNull(),
+  inputUnitId: uuid('input_unit_id').notNull().references(() => units.id),
+  qtyBase: numeric('qty_base', { precision: 18, scale: 6 }).notNull(),
+  reason: text('reason'),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  submittedBy: uuid('submitted_by').notNull().references(() => users.id),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
+  validatedBy: uuid('validated_by').references(() => users.id),
+  validatedAt: timestamp('validated_at', { withTimezone: true }),
+  finalizedBy: uuid('finalized_by').references(() => users.id),
+  finalizedAt: timestamp('finalized_at', { withTimezone: true }),
+  rejectedBy: uuid('rejected_by').references(() => users.id),
+  rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+  rejectReason: text('reject_reason'),
+  finalizedMovementId: uuid('finalized_movement_id').references(() => stockMovements.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  movementTypeCheck: check('pending_stock_movements_type_check', sql`${t.movementType} IN ${pendingMovementTypes}`),
+  statusCheck: check('pending_stock_movements_status_check', sql`${t.status} IN ${pendingMovementStatuses}`),
+  companyIdx: index('pending_stock_movements_company_idx').on(t.companyId),
+  statusIdx: index('pending_stock_movements_status_idx').on(t.status),
+  itemOutletIdx: index('pending_stock_movements_item_outlet_idx').on(t.itemId, t.outletId),
+  movementTypeIdx: index('pending_stock_movements_type_idx').on(t.movementType),
 }))
 
 export const stockTransfers = pgTable('stock_transfers', {

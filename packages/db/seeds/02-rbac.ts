@@ -57,6 +57,9 @@ export const RBAC_PERMISSION_CATALOG: PermissionSeed[] = [
   { code: 'inventory.waste', description: 'Record inventory waste' },
   { code: 'inventory.transfer_send', description: 'Send inventory transfers between outlets' },
   { code: 'inventory.transfer_receive', description: 'Receive inventory transfers between outlets' },
+  { code: 'inventory.approval_submit', description: 'Submit pending opname/waste for approval' },
+  { code: 'inventory.approval_validate', description: 'Validate pending opname/waste' },
+  { code: 'inventory.approval_finalize', description: 'Finalize approved opname/waste to ledger' },
   { code: 'reports.read', description: 'Read reports' },
   { code: 'reports.submit', description: 'Submit reports' },
   { code: 'reports.validate', description: 'Validate reports' },
@@ -72,7 +75,9 @@ const rbacPermissionCodes = allPermissionCodes.filter((code) => code.startsWith(
 const corePermissionCodes = allPermissionCodes.filter((code) => code.startsWith('core.'))
 const usersPermissionCodes = allPermissionCodes.filter((code) => code.startsWith('users.'))
 const inventoryPermissionCodes = allPermissionCodes.filter((code) => code.startsWith('inventory.'))
-const inventoryOperationalPermissionCodes = inventoryPermissionCodes.filter((code) => code !== 'inventory.item_manage')
+const inventoryOperationalPermissionCodes = inventoryPermissionCodes.filter(
+  (code) => code !== 'inventory.item_manage' && code !== 'inventory.approval_finalize',
+)
 const readPermissionCodes = allPermissionCodes.filter((code) => {
   const action = code.split('.')[1] ?? ''
   return action === 'read' || action.endsWith('_read')

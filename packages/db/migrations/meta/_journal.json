@@ -43,6 +43,13 @@
       "when": 1782385716705,
       "tag": "0005_blue_sunfire",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782492977187,
+      "tag": "0006_pending_stock_movements",
+      "breakpoints": true
     }
   ]
 }
