@@ -224,6 +224,8 @@ rejectReport (POST /reports/:id/reject):
 KPI compliance (GET /reports/kpi/compliance):
   - per outlet (dalam scope) untuk bulan tertentu: hitung jumlah report 'validated' per tipe vs jumlah hari operasi (atau jumlah report yang seharusnya).
   - MVP sederhana: compliance = (jml report validated) / (hari dalam bulan × jml tipe wajib) — atau definisi yang Owner tetapkan. Dokumentasikan formula.
+  > CATATAN BATASAN: compliance MVP pakai penyebut hari kalender penuh — valid untuk laporan AKHIR BULAN.
+  > Mid-bulan misleading (hari belum-terjadi ikut dihitung). Kalender-operasi + timing mid-bulan = utang, dikerjakan di modul Komersial.
 
 immutability: report 'validated' → semua endpoint edit (PATCH, submit, reject) TOLAK (409). Hanya GET.
 ```
