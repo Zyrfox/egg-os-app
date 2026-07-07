@@ -55,9 +55,9 @@ describe('RBAC production seed', () => {
 
     expect(first).toEqual({
       companyId: eggCompanyId,
-      permissions: 42,
+      permissions: 44,
       roles: 8,
-      rolePermissions: 142,
+      rolePermissions: 152,
     })
     expect(second).toEqual(first)
     expect(second).toEqual(await getRbacSeedCounts(db, eggCompanyId))
@@ -158,6 +158,6 @@ describe('RBAC production seed', () => {
   })
 
   it('keeps the permission catalog at the report-enabled seed size', () => {
-    expect(RBAC_PERMISSION_CATALOG).toHaveLength(42)
+    expect(RBAC_PERMISSION_CATALOG).toHaveLength(44)
   })
 })

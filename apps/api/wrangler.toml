@@ -13,3 +13,11 @@ port = 8787
 # [[hyperdrive]]
 # binding = "HYPERDRIVE"
 # id      = "PLACEHOLDER"
+
+# ---------------------------------------------------------------------------
+# R2 — private evidence object storage. Bucket creation remains an owner task.
+# ---------------------------------------------------------------------------
+[[r2_buckets]]
+binding             = "EVIDENCE_BUCKET"
+bucket_name         = "egg-os-evidence"
+preview_bucket_name = "egg-os-evidence-preview"

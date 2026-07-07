@@ -1,6 +1,7 @@
 export type Env = {
   DATABASE_URL: string;
   JWT_ACCESS_SECRET: string;
+  EVIDENCE_BUCKET: R2Bucket;
 };
 
 export type Scope = {
