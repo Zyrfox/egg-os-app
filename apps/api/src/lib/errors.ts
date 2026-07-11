@@ -27,6 +27,7 @@ export const ERR = {
   INSUFFICIENT_STOCK:       { code: 'ERR_INSUFFICIENT_STOCK',       message: 'Stok tidak mencukupi',                          http: 422 },
   ALREADY_RECEIVED:         { code: 'ERR_ALREADY_RECEIVED',         message: 'Transfer sudah diterima',                       http: 422 },
   SELF_APPROVAL:            { code: 'ERR_SELF_APPROVAL',            message: 'Tidak boleh approve usulan sendiri',            http: 403 },
+  UPLOAD_NOT_FOUND:         { code: 'ERR_UPLOAD_NOT_FOUND',         message: 'File belum ditemukan di storage',               http: 422 },
   INTERNAL:                 { code: 'ERR_INTERNAL',                 message: 'Terjadi kesalahan sistem',                      http: 500 },
   INVALID_CREDENTIALS:      { code: 'ERR_INVALID_CREDENTIALS',      message: 'Email atau password tidak sesuai',              http: 401 },
   USER_INACTIVE:            { code: 'ERR_USER_INACTIVE',            message: 'Akun tidak aktif',                              http: 403 },
