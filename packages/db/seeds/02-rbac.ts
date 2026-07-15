@@ -74,6 +74,10 @@ export const RBAC_PERMISSION_CATALOG: PermissionSeed[] = [
   { code: 'approval.decide', description: 'Decide approvals' },
   { code: 'audit.read', description: 'Read audit records' },
   { code: 'export.run', description: 'Run exports' },
+  { code: 'dashboard.executive', description: 'View executive dashboard (outlet status, compliance, approval, discrepancy)' },
+  { code: 'dashboard.spv', description: 'View SPV dashboard (report today, pending validation, opname, issues)' },
+  { code: 'dashboard.inventory', description: 'View inventory dashboard (stock critical, movement today, waste, discrepancy)' },
+  { code: 'dashboard.approval_queue', description: 'View approval queue dashboard (stock movements, reports to validate)' },
 ]
 
 const allPermissionCodes = RBAC_PERMISSION_CATALOG.map((permission) => permission.code)
@@ -117,7 +121,7 @@ export const RBAC_STARTER_ROLES: RoleSeed[] = [
     name: 'Direksi',
     description: 'Company leadership with read, approval, audit, and export access',
     defaultScopeType: 'company',
-    permissions: [...readPermissionCodes, 'approval.decide', 'export.run'],
+    permissions: [...readPermissionCodes, 'approval.decide', 'export.run', 'dashboard.executive'],
   },
   {
     code: 'MANAGER',
@@ -139,6 +143,9 @@ export const RBAC_STARTER_ROLES: RoleSeed[] = [
       'evidence.upload',
       'approval.decide',
       'approval.read',
+      'dashboard.executive',
+      'dashboard.inventory',
+      'dashboard.approval_queue',
     ],
   },
   {
@@ -158,6 +165,8 @@ export const RBAC_STARTER_ROLES: RoleSeed[] = [
       'approval.request',
       'approval.read',
       'core.outlet_read',
+      'dashboard.spv',
+      'dashboard.approval_queue',
     ],
   },
   {

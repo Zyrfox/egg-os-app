@@ -59,6 +59,7 @@ export const items = pgTable('items', {
   baseUnitId: uuid('base_unit_id').notNull().references(() => units.id),
   pawoonRef: varchar('pawoon_ref', { length: 120 }),
   isActive: boolean('is_active').notNull().default(true),
+  minStock: numeric('min_stock', { precision: 18, scale: 6 }),
   ...auditColumns,
 }, (t) => ({
   companySkuUq: uniqueIndex('items_company_sku_uq')

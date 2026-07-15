@@ -66,6 +66,7 @@ function itemDto(row: ItemRow) {
     base_unit_id: row.baseUnitId,
     pawoon_ref: row.pawoonRef,
     is_active: row.isActive,
+    min_stock: row.minStock ?? null,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
     deleted_at: iso(row.deletedAt),
@@ -309,6 +310,7 @@ export async function createItem(db: Db, ctx: InventoryServiceContext, input: Cr
         categoryId: input.categoryId ?? null,
         baseUnitId: input.baseUnitId,
         pawoonRef: input.pawoonRef ?? null,
+        minStock: input.minStock ?? null,
       })
       .returning()
 
@@ -379,6 +381,7 @@ export async function updateItem(db: Db, ctx: InventoryServiceContext, itemId: s
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
       ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      ...(input.minStock !== undefined ? { minStock: input.minStock } : {}),
       updatedAt: new Date(),
     })
     .where(and(eq(items.id, itemId), eq(items.companyId, ctx.companyId), isNull(items.deletedAt)))

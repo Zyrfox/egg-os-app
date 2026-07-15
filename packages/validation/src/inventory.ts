@@ -26,6 +26,7 @@ export const CreateItemReq = z
     category_id: z.string().uuid().nullable().optional(),
     base_unit_id: z.string().uuid(),
     pawoon_ref: z.string().trim().max(120).optional(),
+    min_stock: DecimalString.nullable().optional(),
   })
   .transform((value) => ({
     sku: value.sku,
@@ -33,6 +34,7 @@ export const CreateItemReq = z
     categoryId: value.category_id ?? null,
     baseUnitId: value.base_unit_id,
     pawoonRef: value.pawoon_ref ?? null,
+    minStock: value.min_stock ?? null,
   }))
 
 export const UpdateItemReq = z
@@ -40,15 +42,21 @@ export const UpdateItemReq = z
     name: z.string().trim().min(1).max(150).optional(),
     category_id: z.string().uuid().nullable().optional(),
     is_active: z.boolean().optional(),
+    min_stock: DecimalString.nullable().optional(),
   })
   .refine(
-    (value) => value.name !== undefined || value.category_id !== undefined || value.is_active !== undefined,
+    (value) =>
+      value.name !== undefined ||
+      value.category_id !== undefined ||
+      value.is_active !== undefined ||
+      value.min_stock !== undefined,
     { message: 'at least one field is required' },
   )
   .transform((value) => ({
     ...(value.name !== undefined ? { name: value.name } : {}),
     ...(value.category_id !== undefined ? { categoryId: value.category_id } : {}),
     ...(value.is_active !== undefined ? { isActive: value.is_active } : {}),
+    ...(value.min_stock !== undefined ? { minStock: value.min_stock } : {}),
   }))
 
 export const AddConversionReq = z

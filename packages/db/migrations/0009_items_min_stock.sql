@@ -1,0 +1,1 @@
+ALTER TABLE "items" ADD COLUMN "min_stock" numeric(18, 6);

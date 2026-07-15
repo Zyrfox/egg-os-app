@@ -3,6 +3,7 @@ import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import * as schema from '@egg-os/db'
 import { companies } from '@egg-os/db'
+import { UpdateItemReq } from '@egg-os/validation'
 import type { Db } from '../../lib/db'
 import {
   addItemUnitConversion,
@@ -309,6 +310,27 @@ describe('inventory master-data service', () => {
       404,
       'ERR_OUT_OF_SCOPE',
     )
+  })
+
+  it('D6a PATCH min_stock: set value → stored, clear with null → NULL, omit → unchanged', async () => {
+    const { item } = await seedBaseItem('MIN-STOCK')
+
+    const set = await updateItem(db, ctx, item.id, { minStock: '5.5' })
+    expect(set.min_stock).toBe('5.500000')
+
+    const clear = await updateItem(db, ctx, item.id, { minStock: null })
+    expect(clear.min_stock).toBeNull()
+
+    await updateItem(db, ctx, item.id, { minStock: '3' })
+    const unchanged = await updateItem(db, ctx, item.id, { name: 'New Name' })
+    expect(unchanged.min_stock).toBe('3.000000')
+  })
+
+  it('D6b min_stock zero is valid; negative string rejected by Zod (UpdateItemReq)', () => {
+    expect(UpdateItemReq.safeParse({ min_stock: '0' }).success).toBe(true)
+    expect(UpdateItemReq.safeParse({ min_stock: '0.000001' }).success).toBe(true)
+    expect(UpdateItemReq.safeParse({ min_stock: '-1' }).success).toBe(false)
+    expect(UpdateItemReq.safeParse({ min_stock: '-0.5' }).success).toBe(false)
   })
 })
 

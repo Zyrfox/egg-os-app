@@ -64,6 +64,13 @@
       "when": 1783434704167,
       "tag": "0008_evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784067022432,
+      "tag": "0009_items_min_stock",
+      "breakpoints": true
     }
   ]
 }
