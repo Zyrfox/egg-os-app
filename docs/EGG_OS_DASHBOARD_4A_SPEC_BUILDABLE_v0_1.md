@@ -111,6 +111,7 @@ Base `/api/v1/dashboards`. Semua GET, authMiddleware + requirePermission per rou
 ```
 - Queue = read-only list; aksi tetap via endpoint modul masing-masing (approval/report). Flag `actionable` = hint SoD, murah dan jujur; enforcement tetap di service existing.
 - Queue per-item mengikuti struktur flat pending_stock_movements; grouping = urusan presentasi frontend. (Keputusan Owner Q1=B: hapus item_count — setiap entry = 1 movement row, id langsung actionable.)
+- **Naming note (schema-verified):** DTO `submitted_count` / `to_validate` memetakan DB `status='pending'` pada `pending_stock_movements`. Alur: user *submit* → status `'pending'` (menunggu validasi). Nilai `'submitted'` tidak ada di schema; bahasa bisnis DTO konsisten dengan flow, bukan enum DB.
 
 ---
 
