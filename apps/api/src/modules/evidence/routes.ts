@@ -6,7 +6,7 @@ import { errResponse, okResponse, ERR } from '../../lib/errors'
 import { authMiddleware } from '../../middleware/auth'
 import type { Env } from '../../types'
 import { requirePermission, type RbacVariables } from '../rbac/middleware'
-import { InventoryServiceError } from '../inventory/service'
+import { ScopeError } from '../../lib/scope'
 import {
   confirmUpload,
   createR2Presigner,
@@ -19,10 +19,10 @@ import {
   type EvidenceServiceContext,
 } from './service'
 
-type ServiceLikeError = EvidenceServiceError | InventoryServiceError
+type ServiceLikeError = EvidenceServiceError | ScopeError
 
 function isServiceError(error: unknown): error is ServiceLikeError {
-  return error instanceof EvidenceServiceError || error instanceof InventoryServiceError
+  return error instanceof EvidenceServiceError || error instanceof ScopeError
 }
 
 type EvidenceCtx = Context<{ Bindings: Env; Variables: RbacVariables }>

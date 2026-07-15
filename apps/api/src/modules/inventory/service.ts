@@ -10,14 +10,8 @@ import {
 import { ERR } from '../../lib/errors'
 import type { Db } from '../../lib/db'
 import type { AccessFilter } from '../rbac/middleware'
-import {
-  buildOrgTree,
-  scopeCovers,
-  type Grant,
-  type OrgTree,
-  type ResolvedAccess,
-  type ScopeRef,
-} from '../rbac/resolve'
+import type { ResolvedAccess } from '../rbac/resolve'
+import { assertOutletInScope, visibleOutletIdsForPermission } from '../../lib/scope'
 
 export type ErrorDetail = { field: string; issue: string }
 
@@ -219,38 +213,7 @@ async function getOutlet(db: Db, companyId: string, outletId: string): Promise<O
   return row
 }
 
-function permissionScopes(ctx: InventoryServiceContext, permission: string): ScopeRef[] {
-  if (ctx.accessFilter?.permission === permission) {
-    return ctx.accessFilter.structuralScopes
-  }
-
-  if (!ctx.access) return []
-
-  return ctx.access.grants
-    .filter((grant) => grant.permission === permission)
-    .map(({ scopeType, scopeId }) => ({ scopeType, scopeId }))
-}
-
-function outletVisibleWithScopes(scopes: ScopeRef[], permission: string, outletId: string, orgTree: OrgTree) {
-  const target = { scopeType: 'outlet' as const, scopeId: outletId }
-  return scopes.some((scope) => scopeCovers({ permission, ...scope } as Grant, target, orgTree))
-}
-
-export async function assertOutletInScope(db: Db, ctx: InventoryServiceContext, outletId: string, permission: string) {
-  const orgTree = await buildOrgTree(db, ctx.companyId)
-  const scopes = permissionScopes(ctx, permission)
-  if (!outletVisibleWithScopes(scopes, permission, outletId, orgTree)) throw outOfScope()
-}
-
-export async function visibleOutletIdsForPermission(db: Db, ctx: InventoryServiceContext, permission: string) {
-  const orgTree = await buildOrgTree(db, ctx.companyId)
-  const scopes = permissionScopes(ctx, permission)
-  if (scopes.length === 0) return []
-
-  return Object.keys(orgTree.outletsById).filter((outletId) => {
-    return outletVisibleWithScopes(scopes, permission, outletId, orgTree)
-  })
-}
+export { assertOutletInScope, visibleOutletIdsForPermission }
 
 async function prepareMovement(
   db: Db,

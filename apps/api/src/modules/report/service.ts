@@ -5,10 +5,10 @@ import type { Db } from '../../lib/db'
 import {
   assertOutletInScope,
   visibleOutletIdsForPermission,
-  type InventoryServiceContext,
-} from '../inventory/service'
+  type ScopeContext,
+} from '../../lib/scope'
 
-export type ReportServiceContext = InventoryServiceContext
+export type ReportServiceContext = ScopeContext
 
 export type ReportType = 'opening' | 'closing' | 'issue'
 export type ReportStatus = 'draft' | 'submitted' | 'validated' | 'rejected'

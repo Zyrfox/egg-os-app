@@ -15,7 +15,7 @@ import { errResponse, okResponse, ERR } from '../../lib/errors'
 import { authMiddleware } from '../../middleware/auth'
 import type { Env } from '../../types'
 import { requirePermission, type RbacVariables } from '../rbac/middleware'
-import { InventoryServiceError } from '../inventory/service'
+import { ScopeError } from '../../lib/scope'
 import {
   complianceKpi,
   createDraft,
@@ -30,10 +30,10 @@ import {
   type ReportServiceContext,
 } from './service'
 
-type ServiceLikeError = ReportServiceError | InventoryServiceError
+type ServiceLikeError = ReportServiceError | ScopeError
 
 function isServiceError(error: unknown): error is ServiceLikeError {
-  return error instanceof ReportServiceError || error instanceof InventoryServiceError
+  return error instanceof ReportServiceError || error instanceof ScopeError
 }
 
 type ReportContext = Context<{ Bindings: Env; Variables: RbacVariables }>

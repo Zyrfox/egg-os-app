@@ -26,6 +26,7 @@ import { errResponse, okResponse, ERR } from '../../lib/errors'
 import { authMiddleware } from '../../middleware/auth'
 import type { Env } from '../../types'
 import { requirePermission, type RbacVariables } from '../rbac/middleware'
+import { ScopeError } from '../../lib/scope'
 import {
   createStockIn,
   createStockOut,
@@ -74,7 +75,13 @@ function validationResponse(c: InventoryContext, err: z.ZodError) {
   return c.json(errResponse(ERR.VALIDATION.code, ERR.VALIDATION.message, formatZodErrors(err)), 422)
 }
 
-function serviceErrorResponse(c: InventoryContext, error: InventoryServiceError) {
+type ServiceLikeError = InventoryServiceError | ScopeError
+
+function isInventoryLikeError(error: unknown): error is ServiceLikeError {
+  return error instanceof InventoryServiceError || error instanceof ScopeError
+}
+
+function serviceErrorResponse(c: InventoryContext, error: ServiceLikeError) {
   return c.json(
     errResponse(error.code, error.message, error.details),
     error.status as ContentfulStatusCode
@@ -105,7 +112,7 @@ inventory.get('/items', authMiddleware, requirePermission('inventory.read'), asy
     const result = await listItems(db, serviceCtx(c), parsed.data)
     return c.json(okResponse(result.data, result.meta), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -120,7 +127,7 @@ inventory.post('/items', authMiddleware, requirePermission('inventory.item_manag
   try {
     return c.json(okResponse(await createItem(db, serviceCtx(c), parsed.data)), 201)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -138,7 +145,7 @@ inventory.post('/items/:id/units', authMiddleware, requirePermission('inventory.
   try {
     return c.json(okResponse(await addItemUnitConversion(db, serviceCtx(c), params.data.id, parsed.data)), 201)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -152,7 +159,7 @@ inventory.get('/items/:id', authMiddleware, requirePermission('inventory.read'),
   try {
     return c.json(okResponse(await getItem(db, serviceCtx(c), parsed.data.id)), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -170,7 +177,7 @@ inventory.patch('/items/:id', authMiddleware, requirePermission('inventory.item_
   try {
     return c.json(okResponse(await updateItem(db, serviceCtx(c), params.data.id, parsed.data)), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -185,7 +192,7 @@ inventory.get('/units', authMiddleware, requirePermission('inventory.read'), asy
     const result = await listUnits(db, serviceCtx(c), parsed.data)
     return c.json(okResponse(result.data, result.meta), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -200,7 +207,7 @@ inventory.post('/units', authMiddleware, requirePermission('inventory.item_manag
   try {
     return c.json(okResponse(await createUnit(db, serviceCtx(c), parsed.data)), 201)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -215,7 +222,7 @@ inventory.get('/categories', authMiddleware, requirePermission('inventory.read')
     const result = await listCategories(db, serviceCtx(c), parsed.data)
     return c.json(okResponse(result.data, result.meta), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -230,7 +237,7 @@ inventory.post('/categories', authMiddleware, requirePermission('inventory.item_
   try {
     return c.json(okResponse(await createCategory(db, serviceCtx(c), parsed.data)), 201)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -245,7 +252,7 @@ inventory.get('/balances', authMiddleware, requirePermission('inventory.read'), 
     const result = await getBalances(db, serviceCtx(c), parsed.data)
     return c.json(okResponse(result.data, result.meta), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -260,7 +267,7 @@ inventory.get('/movements', authMiddleware, requirePermission('inventory.read'),
     const result = await getMovements(db, serviceCtx(c), parsed.data)
     return c.json(okResponse(result.data, result.meta), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -275,7 +282,7 @@ inventory.post('/stock-in', authMiddleware, requirePermission('inventory.stock_i
   try {
     return c.json(okResponse(await createStockIn(db, serviceCtx(c), parsed.data)), 201)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -290,7 +297,7 @@ inventory.post('/stock-out', authMiddleware, requirePermission('inventory.stock_
   try {
     return c.json(okResponse(await createStockOut(db, serviceCtx(c), parsed.data)), 201)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -308,7 +315,7 @@ inventory.post('/opname/submit', authMiddleware, requirePermission('inventory.ap
       201,
     )
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -326,7 +333,7 @@ inventory.post('/waste/submit', authMiddleware, requirePermission('inventory.app
       201,
     )
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -341,7 +348,7 @@ inventory.get('/approvals', authMiddleware, requirePermission('inventory.read'),
     const result = await listApprovals(db, serviceCtx(c), parsed.data)
     return c.json(okResponse(result.data, result.meta), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -355,7 +362,7 @@ inventory.get('/approvals/:id', authMiddleware, requirePermission('inventory.rea
   try {
     return c.json(okResponse(await getApproval(db, serviceCtx(c), parsed.data.id)), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -369,7 +376,7 @@ inventory.post('/approvals/:id/validate', authMiddleware, requirePermission('inv
   try {
     return c.json(okResponse(await validateApproval(db, serviceCtx(c), parsed.data.id)), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -383,7 +390,7 @@ inventory.post('/approvals/:id/finalize', authMiddleware, requirePermission('inv
   try {
     return c.json(okResponse(await finalizeApproval(db, serviceCtx(c), parsed.data.id)), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -401,7 +408,7 @@ inventory.post('/approvals/:id/reject', authMiddleware, requirePermission('inven
   try {
     return c.json(okResponse(await rejectApproval(db, serviceCtx(c), params.data.id, parsed.data.reason)), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -416,7 +423,7 @@ inventory.post('/transfers', authMiddleware, requirePermission('inventory.transf
   try {
     return c.json(okResponse(await createTransfer(db, serviceCtx(c), parsed.data)), 201)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })
@@ -430,7 +437,7 @@ inventory.post('/transfers/:id/receive', authMiddleware, requirePermission('inve
   try {
     return c.json(okResponse(await receiveTransfer(db, serviceCtx(c), parsed.data.id)), 200)
   } catch (error) {
-    if (error instanceof InventoryServiceError) return serviceErrorResponse(c, error)
+    if (isInventoryLikeError(error)) return serviceErrorResponse(c, error)
     throw error
   }
 })

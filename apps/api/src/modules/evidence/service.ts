@@ -3,14 +3,11 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { dailyReports, evidence } from '@egg-os/db'
 import { ERR } from '../../lib/errors'
 import type { Db } from '../../lib/db'
-import {
-  assertOutletInScope,
-  type InventoryServiceContext,
-} from '../inventory/service'
+import { assertOutletInScope, type ScopeContext } from '../../lib/scope'
 
 // ── Types + constants ──────────────────────────────────────────────────────
 
-export type EvidenceServiceContext = InventoryServiceContext
+export type EvidenceServiceContext = ScopeContext
 export type RecordType = 'daily_report'
 export type EvidenceStatus = 'pending' | 'confirmed'
 export type EvidenceContentType = 'image/jpeg' | 'image/png' | 'application/pdf'
