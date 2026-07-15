@@ -57,7 +57,7 @@ describe('RBAC production seed', () => {
       companyId: eggCompanyId,
       permissions: 48,
       roles: 8,
-      rolePermissions: 162,
+      rolePermissions: 161,
     })
     expect(second).toEqual(first)
     expect(second).toEqual(await getRbacSeedCounts(db, eggCompanyId))
