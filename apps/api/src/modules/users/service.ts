@@ -16,6 +16,7 @@ import type {
 import { AUTH } from '../../lib/constants'
 import type { Db } from '../../lib/db'
 import { generateToken, hashToken } from '../../lib/crypto'
+import { auditLog } from '../../lib/audit'
 import { ERR } from '../../lib/errors'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AccessFilter } from '../rbac/middleware'
@@ -442,6 +443,10 @@ export async function inviteUser(db: Db, ctx: UsersServiceContext, input: Invite
         set_password_token_created: true,
         email_delivery: 'stubbed',
       })
+      await auditLog(txDb, ctx, {
+        action: 'users.create', recordType: 'user', recordId: user.id,
+        meta: { email: user.email },
+      })
 
       return toPublicUserDetail(txDb, user)
     })
@@ -463,21 +468,31 @@ export async function updateUser(
     throw validation([{ field: 'status', issue: 'archived adalah status terminal' }])
   }
 
-  const [updated] = await db
-    .update(users)
-    .set({
-      ...(input.full_name !== undefined ? { fullName: input.full_name } : {}),
-      ...(input.phone !== undefined ? { phone: input.phone } : {}),
-      updatedAt: new Date(),
+  const changedFields: string[] = []
+  if (input.full_name !== undefined) changedFields.push('full_name')
+  if (input.phone !== undefined) changedFields.push('phone')
+
+  return db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db
+    const [updated] = await txDb
+      .update(users)
+      .set({
+        ...(input.full_name !== undefined ? { fullName: input.full_name } : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(users.id, user.id), eq(users.companyId, ctx.companyId)))
+      .returning()
+
+    await logUserEvent(txDb, ctx.companyId, ctx.actorUserId, 'user_updated', {
+      target_user_id: user.id,
     })
-    .where(and(eq(users.id, user.id), eq(users.companyId, ctx.companyId)))
-    .returning()
-
-  await logUserEvent(db, ctx.companyId, ctx.actorUserId, 'user_updated', {
-    target_user_id: user.id,
+    await auditLog(txDb, ctx, {
+      action: 'users.update', recordType: 'user', recordId: user.id,
+      meta: { changed_fields: changedFields, target_user_id: user.id },
+    })
+    return toPublicUserDetail(txDb, updated)
   })
-
-  return toPublicUserDetail(db, updated)
 }
 
 export async function suspendUser(db: Db, ctx: UsersServiceContext, userId: string) {
@@ -485,34 +500,46 @@ export async function suspendUser(db: Db, ctx: UsersServiceContext, userId: stri
   assertSelfGuard(ctx, user)
   assertStatusTransition(user, 'suspend')
 
-  const [updated] = await db
-    .update(users)
-    .set({ status: 'suspended', updatedAt: new Date() })
-    .where(and(eq(users.id, user.id), eq(users.companyId, ctx.companyId)))
-    .returning()
+  return db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db
+    const [updated] = await txDb
+      .update(users)
+      .set({ status: 'suspended', updatedAt: new Date() })
+      .where(and(eq(users.id, user.id), eq(users.companyId, ctx.companyId)))
+      .returning()
 
-  await logUserEvent(db, ctx.companyId, ctx.actorUserId, 'user_suspended', {
-    target_user_id: user.id,
+    await logUserEvent(txDb, ctx.companyId, ctx.actorUserId, 'user_suspended', {
+      target_user_id: user.id,
+    })
+    await auditLog(txDb, ctx, {
+      action: 'users.suspend', recordType: 'user', recordId: user.id,
+      meta: { target_user_id: user.id },
+    })
+    return toPublicUserDetail(txDb, updated)
   })
-
-  return toPublicUserDetail(db, updated)
 }
 
 export async function reactivateUser(db: Db, ctx: UsersServiceContext, userId: string) {
   const user = await assertUserInScope(db, ctx, userId, 'users.update')
   assertStatusTransition(user, 'reactivate')
 
-  const [updated] = await db
-    .update(users)
-    .set({ status: 'active', updatedAt: new Date() })
-    .where(and(eq(users.id, user.id), eq(users.companyId, ctx.companyId)))
-    .returning()
+  return db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db
+    const [updated] = await txDb
+      .update(users)
+      .set({ status: 'active', updatedAt: new Date() })
+      .where(and(eq(users.id, user.id), eq(users.companyId, ctx.companyId)))
+      .returning()
 
-  await logUserEvent(db, ctx.companyId, ctx.actorUserId, 'user_reactivated', {
-    target_user_id: user.id,
+    await logUserEvent(txDb, ctx.companyId, ctx.actorUserId, 'user_reactivated', {
+      target_user_id: user.id,
+    })
+    await auditLog(txDb, ctx, {
+      action: 'users.reactivate', recordType: 'user', recordId: user.id,
+      meta: { target_user_id: user.id },
+    })
+    return toPublicUserDetail(txDb, updated)
   })
-
-  return toPublicUserDetail(db, updated)
 }
 
 export async function archiveUser(db: Db, ctx: UsersServiceContext, userId: string) {
@@ -542,6 +569,10 @@ export async function archiveUser(db: Db, ctx: UsersServiceContext, userId: stri
 
     await logUserEvent(txDb, ctx.companyId, ctx.actorUserId, 'user_archived', {
       target_user_id: user.id,
+    })
+    await auditLog(txDb, ctx, {
+      action: 'users.archive', recordType: 'user', recordId: user.id,
+      meta: { target_user_id: user.id },
     })
 
     return toPublicUserDetail(txDb, archived)
@@ -587,17 +618,23 @@ export async function resetPasswordForUser(db: Db, ctx: UsersServiceContext, use
     throw validation([{ field: 'status', issue: 'archived adalah status terminal' }])
   }
 
-  await createPasswordToken(db, user, 'reset_password')
-  const [updated] = await db
-    .update(users)
-    .set({ firstLoginRequired: true, updatedAt: new Date() })
-    .where(and(eq(users.id, user.id), eq(users.companyId, ctx.companyId)))
-    .returning()
+  return db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db
+    await createPasswordToken(txDb, user, 'reset_password')
+    const [updated] = await txDb
+      .update(users)
+      .set({ firstLoginRequired: true, updatedAt: new Date() })
+      .where(and(eq(users.id, user.id), eq(users.companyId, ctx.companyId)))
+      .returning()
 
-  await logUserEvent(db, ctx.companyId, ctx.actorUserId, 'user_password_reset_requested', {
-    target_user_id: user.id,
-    reset_password_token_created: true,
+    await logUserEvent(txDb, ctx.companyId, ctx.actorUserId, 'user_password_reset_requested', {
+      target_user_id: user.id,
+      reset_password_token_created: true,
+    })
+    await auditLog(txDb, ctx, {
+      action: 'users.password_reset', recordType: 'user', recordId: user.id,
+      meta: { target_user_id: user.id },
+    })
+    return toPublicUserDetail(txDb, updated)
   })
-
-  return toPublicUserDetail(db, updated)
 }

@@ -5,12 +5,12 @@ import { companies, outlets } from './core'
 
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  companyId: uuid('company_id').notNull().references(() => companies.id),
-  actorUserId: uuid('actor_user_id').references(() => users.id),
+  companyId: uuid('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+  actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
   action: varchar('action', { length: 100 }).notNull(),
   recordType: varchar('record_type', { length: 40 }),
   recordId: uuid('record_id'),
-  outletId: uuid('outlet_id').references(() => outlets.id),
+  outletId: uuid('outlet_id').references(() => outlets.id, { onDelete: 'set null' }),
   meta: jsonb('meta'),
   ip: varchar('ip', { length: 64 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

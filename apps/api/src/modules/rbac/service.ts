@@ -13,6 +13,7 @@ import {
 } from '@egg-os/db'
 import { ERR } from '../../lib/errors'
 import type { Db } from '../../lib/db'
+import { auditLog } from '../../lib/audit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type {
   AssignRoleInput,
@@ -237,17 +238,24 @@ export async function listRoles(db: Db, companyId: string) {
 
 export async function createRole(db: Db, companyId: string, input: CreateRoleInput) {
   try {
-    const [role] = await db
-      .insert(roles)
-      .values({
-        companyId,
-        code: input.code,
-        name: input.name,
-        description: input.description,
-        defaultScopeType: input.default_scope_type,
+    return await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db
+      const [role] = await txDb
+        .insert(roles)
+        .values({
+          companyId,
+          code: input.code,
+          name: input.name,
+          description: input.description,
+          defaultScopeType: input.default_scope_type,
+        })
+        .returning()
+      await auditLog(txDb, { companyId }, {
+        action: 'rbac.role_create', recordType: 'role', recordId: role.id,
+        meta: { code: role.code, name: role.name },
       })
-      .returning()
-    return roleDto(role)
+      return roleDto(role)
+    })
   } catch (error) {
     if (isUniqueViolation(error)) throw conflict()
     throw error
@@ -273,18 +281,28 @@ export async function updateRole(db: Db, companyId: string, roleId: string, inpu
   if (!role) throw notFound()
   if (role.isSystem) throw forbidden('System role tidak boleh diubah')
 
-  const [updated] = await db
-    .update(roles)
-    .set({
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.description !== undefined ? { description: input.description } : {}),
-      ...(input.default_scope_type !== undefined ? { defaultScopeType: input.default_scope_type } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(roles.id, role.id))
-    .returning()
+  return db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db
+    const [updated] = await txDb
+      .update(roles)
+      .set({
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.default_scope_type !== undefined ? { defaultScopeType: input.default_scope_type } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(roles.id, role.id))
+      .returning()
 
-  return roleDto(updated)
+    await auditLog(txDb, { companyId }, {
+      action: 'rbac.role_update', recordType: 'role', recordId: updated.id,
+      meta: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+      },
+    })
+    return roleDto(updated)
+  })
 }
 
 export async function deleteRole(db: Db, companyId: string, roleId: string) {
@@ -292,13 +310,20 @@ export async function deleteRole(db: Db, companyId: string, roleId: string) {
   if (!role) throw notFound()
   if (role.isSystem) throw forbidden('System role tidak boleh dihapus')
 
-  const [deleted] = await db
-    .update(roles)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(eq(roles.id, role.id))
-    .returning()
+  return db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db
+    const [deleted] = await txDb
+      .update(roles)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(roles.id, role.id))
+      .returning()
 
-  return roleDto(deleted)
+    await auditLog(txDb, { companyId }, {
+      action: 'rbac.role_delete', recordType: 'role', recordId: deleted.id,
+      meta: { code: role.code },
+    })
+    return roleDto(deleted)
+  })
 }
 
 export async function setRolePermissions(
@@ -321,19 +346,27 @@ export async function setRolePermissions(
     throw validation([{ field: 'permission_codes', issue: `permission tidak ditemukan: ${missing.join(', ')}` }])
   }
 
-  await db
-    .delete(rolePermissions)
-    .where(and(eq(rolePermissions.roleId, role.id), eq(rolePermissions.companyId, companyId)))
+  return db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db
+    await txDb
+      .delete(rolePermissions)
+      .where(and(eq(rolePermissions.roleId, role.id), eq(rolePermissions.companyId, companyId)))
 
-  await db.insert(rolePermissions).values(
-    rows.map((permission) => ({
-      roleId: role.id,
-      permissionId: permission.id,
-      companyId,
-    }))
-  )
+    await txDb.insert(rolePermissions).values(
+      rows.map((permission) => ({
+        roleId: role.id,
+        permissionId: permission.id,
+        companyId,
+      }))
+    )
 
-  return getRole(db, companyId, role.id)
+    await auditLog(txDb, { companyId }, {
+      action: 'rbac.role_permissions_set', recordType: 'role', recordId: role.id,
+      meta: { permission_codes: input.permission_codes },
+    })
+
+    return getRole(txDb, companyId, role.id)
+  })
 }
 
 export async function listPermissions(db: Db) {
@@ -356,28 +389,39 @@ export async function assignUserRole(
   if (!targetUser || !role) throw notFound()
 
   try {
-    const [assignment] = await db
-      .insert(userRoles)
-      .values({
-        userId: targetUserId,
-        roleId: role.id,
-        companyId,
-        scopeType: input.scope_type,
-        scopeId: input.scope_id,
-        grantedBy,
+    return await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db
+      const [assignment] = await txDb
+        .insert(userRoles)
+        .values({
+          userId: targetUserId,
+          roleId: role.id,
+          companyId,
+          scopeType: input.scope_type,
+          scopeId: input.scope_id,
+          grantedBy,
+        })
+        .returning()
+
+      await logRbacEvent(txDb, companyId, grantedBy, 'rbac_role_assigned', {
+        target_user_id: targetUserId,
+        role_id: role.id,
+        scope_type: input.scope_type,
+        scope_id: input.scope_id,
       })
-      .returning()
 
-    await logRbacEvent(db, companyId, grantedBy, 'rbac_role_assigned', {
-      target_user_id: targetUserId,
-      role_id: role.id,
-      scope_type: input.scope_type,
-      scope_id: input.scope_id,
-    })
+      await auditLog(txDb, { companyId, actorUserId: grantedBy }, {
+        action: 'rbac.user_role_assign', recordType: 'user_role', recordId: assignment.id,
+        outletId: input.scope_type === 'outlet' ? (input.scope_id ?? undefined) : undefined,
+        meta: {
+          target_user_id: targetUserId,
+          role_code: role.code,
+          scope_type: input.scope_type,
+          scope_id: input.scope_id,
+        },
+      })
 
-    return userRoleDto({
-      ...assignment,
-      roleCode: role.code,
+      return userRoleDto({ ...assignment, roleCode: role.code })
     })
   } catch (error) {
     if (isUniqueViolation(error)) throw conflict()
@@ -418,27 +462,35 @@ export async function revokeUserRole(
   const targetUser = await getUserInCompany(db, companyId, targetUserId)
   if (!targetUser) throw notFound()
 
-  const [assignment] = await db
-    .update(userRoles)
-    .set({ deletedAt: new Date() })
-    .where(
-      and(
-        eq(userRoles.id, assignmentId),
-        eq(userRoles.companyId, companyId),
-        eq(userRoles.userId, targetUserId),
-        isNull(userRoles.deletedAt)
+  return db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db
+    const [assignment] = await txDb
+      .update(userRoles)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(userRoles.id, assignmentId),
+          eq(userRoles.companyId, companyId),
+          eq(userRoles.userId, targetUserId),
+          isNull(userRoles.deletedAt)
+        )
       )
-    )
-    .returning()
-  if (!assignment) throw notFound()
+      .returning()
+    if (!assignment) throw notFound()
 
-  await logRbacEvent(db, companyId, revokedBy, 'rbac_role_revoked', {
-    target_user_id: targetUserId,
-    assignment_id: assignmentId,
+    await logRbacEvent(txDb, companyId, revokedBy, 'rbac_role_revoked', {
+      target_user_id: targetUserId,
+      assignment_id: assignmentId,
+    })
+
+    await auditLog(txDb, { companyId, actorUserId: revokedBy }, {
+      action: 'rbac.user_role_revoke', recordType: 'user_role', recordId: assignmentId,
+      meta: { target_user_id: targetUserId, assignment_id: assignmentId },
+    })
+
+    const role = await getActiveRole(txDb, companyId, assignment.roleId)
+    return userRoleDto({ ...assignment, roleCode: role?.code ?? '' })
   })
-
-  const role = await getActiveRole(db, companyId, assignment.roleId)
-  return userRoleDto({ ...assignment, roleCode: role?.code ?? '' })
 }
 
 export async function createAccessOverride(

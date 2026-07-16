@@ -10,6 +10,7 @@ import { AUTH } from '../lib/constants';
 import { authMiddleware, firstLoginGuard } from '../middleware/auth';
 import { resolveUserPermissions } from '../modules/rbac/resolve';
 import type { Env, AuthCtx } from '../types';
+import { auditLog } from '../lib/audit';
 
 // ── Zod schemas (§5) ────────────────────────────────────────────────────────
 
@@ -172,13 +173,27 @@ auth.post('/login', async (c) => {
 
   // Status check — suspended / archived
   if (user.status === 'suspended' || user.status === 'archived') {
-    await logEvent(db, user.companyId, user.id, 'login_failed', meta);
+    await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db;
+      await logEvent(txDb, user.companyId, user.id, 'login_failed', meta);
+      await auditLog(txDb, { companyId: user.companyId, actorUserId: user.id }, {
+        action: 'auth.login_failed', recordType: 'user', recordId: user.id,
+        meta: { email }, ip: meta.ip ?? undefined,
+      });
+    });
     return c.json(errResponse(ERR.USER_INACTIVE.code, ERR.USER_INACTIVE.message), 403);
   }
 
   // Freelance expiry (treated as inactive, §3)
   if (user.isFreelance && user.freelanceExpiresAt && user.freelanceExpiresAt < new Date()) {
-    await logEvent(db, user.companyId, user.id, 'login_failed', meta);
+    await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db;
+      await logEvent(txDb, user.companyId, user.id, 'login_failed', meta);
+      await auditLog(txDb, { companyId: user.companyId, actorUserId: user.id }, {
+        action: 'auth.login_failed', recordType: 'user', recordId: user.id,
+        meta: { email }, ip: meta.ip ?? undefined,
+      });
+    });
     return c.json(errResponse(ERR.USER_INACTIVE.code, ERR.USER_INACTIVE.message), 403);
   }
 
@@ -193,20 +208,35 @@ auth.post('/login', async (c) => {
 
   if (!passwordValid) {
     const newCount = user.failedLoginCount + 1;
-    await logEvent(db, user.companyId, user.id, 'login_failed', meta);
 
     if (newCount >= AUTH.MAX_FAILED_LOGIN) {
       const lockedUntil = new Date(Date.now() + AUTH.LOCK_DURATION_SEC * 1000);
-      await db.update(users)
-        .set({ failedLoginCount: newCount, lockedUntil })
-        .where(eq(users.id, user.id));
-      await logEvent(db, user.companyId, user.id, 'account_locked', meta, {
-        locked_until: lockedUntil.toISOString(),
+      await db.transaction(async (tx) => {
+        const txDb = tx as unknown as Db;
+        await txDb.update(users)
+          .set({ failedLoginCount: newCount, lockedUntil })
+          .where(eq(users.id, user.id));
+        await logEvent(txDb, user.companyId, user.id, 'login_failed', meta);
+        await logEvent(txDb, user.companyId, user.id, 'account_locked', meta, {
+          locked_until: lockedUntil.toISOString(),
+        });
+        await auditLog(txDb, { companyId: user.companyId, actorUserId: user.id }, {
+          action: 'auth.login_failed', recordType: 'user', recordId: user.id,
+          meta: { email }, ip: meta.ip ?? undefined,
+        });
       });
       return c.json(errResponse(ERR.LOGIN_LOCKED.code, ERR.LOGIN_LOCKED.message), 429);
     }
 
-    await db.update(users).set({ failedLoginCount: newCount }).where(eq(users.id, user.id));
+    await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db;
+      await logEvent(txDb, user.companyId, user.id, 'login_failed', meta);
+      await txDb.update(users).set({ failedLoginCount: newCount }).where(eq(users.id, user.id));
+      await auditLog(txDb, { companyId: user.companyId, actorUserId: user.id }, {
+        action: 'auth.login_failed', recordType: 'user', recordId: user.id,
+        meta: { email }, ip: meta.ip ?? undefined,
+      });
+    });
     return c.json(errResponse(ERR.INVALID_CREDENTIALS.code, ERR.INVALID_CREDENTIALS.message), 401);
   }
 
@@ -216,17 +246,27 @@ auth.post('/login', async (c) => {
   }
 
   // Success
-  await db.update(users)
-    .set({ failedLoginCount: 0, lastLoginAt: new Date() })
-    .where(eq(users.id, user.id));
-
-  const { accessToken, rawRefresh } = await issueTokenPair(db, user, c.env.JWT_ACCESS_SECRET, meta);
-  await logEvent(db, user.companyId, user.id, 'login_success', meta);
+  let accessToken: string;
+  let rawRefresh: string;
+  await db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db;
+    await txDb.update(users)
+      .set({ failedLoginCount: 0, lastLoginAt: new Date() })
+      .where(eq(users.id, user.id));
+    const result = await issueTokenPair(txDb, user, c.env.JWT_ACCESS_SECRET, meta);
+    accessToken = result.accessToken;
+    rawRefresh = result.rawRefresh;
+    await logEvent(txDb, user.companyId, user.id, 'login_success', meta);
+    await auditLog(txDb, { companyId: user.companyId, actorUserId: user.id }, {
+      action: 'auth.login', recordType: 'user', recordId: user.id,
+      meta: { email: user.email }, ip: meta.ip ?? undefined,
+    });
+  });
 
   return c.json(
     okResponse({
-      access_token: accessToken,
-      refresh_token: rawRefresh,
+      access_token: accessToken!,
+      refresh_token: rawRefresh!,
       token_type: 'Bearer' as const,
       expires_in: AUTH.ACCESS_TTL_SEC,
       user: formatUser(user),
@@ -316,25 +356,30 @@ auth.post('/logout', authMiddleware, async (c) => {
   const db = createDb(c.env.DATABASE_URL);
   const meta = getMeta(c);
 
-  if (parsed.data.refresh_token) {
-    const tHash = hashToken(parsed.data.refresh_token);
-    await db.update(refreshTokens)
-      .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(refreshTokens.tokenHash, tHash),
-          eq(refreshTokens.userId, authCtx.userId),
-          isNull(refreshTokens.revokedAt)
-        )
-      );
-  } else {
-    // No token provided → revoke all sessions for user
-    await db.update(refreshTokens)
-      .set({ revokedAt: new Date() })
-      .where(and(eq(refreshTokens.userId, authCtx.userId), isNull(refreshTokens.revokedAt)));
-  }
-
-  await logEvent(db, authCtx.companyId, authCtx.userId, 'logout', meta);
+  await db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db;
+    if (parsed.data.refresh_token) {
+      const tHash = hashToken(parsed.data.refresh_token);
+      await txDb.update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(refreshTokens.tokenHash, tHash),
+            eq(refreshTokens.userId, authCtx.userId),
+            isNull(refreshTokens.revokedAt)
+          )
+        );
+    } else {
+      // No token provided → revoke all sessions for user
+      await txDb.update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(refreshTokens.userId, authCtx.userId), isNull(refreshTokens.revokedAt)));
+    }
+    await logEvent(txDb, authCtx.companyId, authCtx.userId, 'logout', meta);
+    await auditLog(txDb, { companyId: authCtx.companyId, actorUserId: authCtx.userId }, {
+      action: 'auth.logout', recordType: 'user', recordId: authCtx.userId, ip: meta.ip ?? undefined,
+    });
+  });
   return c.json(okResponse({ success: true }), 200);
 });
 
@@ -406,11 +451,17 @@ auth.post('/set-password', async (c) => {
   }
 
   const passwordHash = hashPassword(new_password);
-  await db.update(users)
-    .set({ passwordHash, status: 'active', firstLoginRequired: false })
-    .where(eq(users.id, pt.userId));
-  await db.update(passwordTokens).set({ usedAt: new Date() }).where(eq(passwordTokens.id, pt.id));
-  await logEvent(db, pt.companyId, pt.userId, 'password_set', meta);
+  await db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db;
+    await txDb.update(users)
+      .set({ passwordHash, status: 'active', firstLoginRequired: false })
+      .where(eq(users.id, pt.userId));
+    await txDb.update(passwordTokens).set({ usedAt: new Date() }).where(eq(passwordTokens.id, pt.id));
+    await logEvent(txDb, pt.companyId, pt.userId, 'password_set', meta);
+    await auditLog(txDb, { companyId: pt.companyId, actorUserId: pt.userId }, {
+      action: 'auth.password_changed', recordType: 'user', recordId: pt.userId, ip: meta.ip ?? undefined,
+    });
+  });
 
   return c.json(okResponse({ success: true }), 200);
 });
@@ -490,17 +541,21 @@ auth.post('/reset-password', async (c) => {
   }
 
   const passwordHash = hashPassword(new_password);
-  await db.update(users)
-    .set({ passwordHash, firstLoginRequired: false })
-    .where(eq(users.id, pt.userId));
-  await db.update(passwordTokens).set({ usedAt: new Date() }).where(eq(passwordTokens.id, pt.id));
-
-  // Revoke ALL refresh tokens → force re-login on all devices (§5.8)
-  await db.update(refreshTokens)
-    .set({ revokedAt: new Date() })
-    .where(and(eq(refreshTokens.userId, pt.userId), isNull(refreshTokens.revokedAt)));
-
-  await logEvent(db, pt.companyId, pt.userId, 'password_reset', meta);
+  await db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db;
+    await txDb.update(users)
+      .set({ passwordHash, firstLoginRequired: false })
+      .where(eq(users.id, pt.userId));
+    await txDb.update(passwordTokens).set({ usedAt: new Date() }).where(eq(passwordTokens.id, pt.id));
+    // Revoke ALL refresh tokens → force re-login on all devices (§5.8)
+    await txDb.update(refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(refreshTokens.userId, pt.userId), isNull(refreshTokens.revokedAt)));
+    await logEvent(txDb, pt.companyId, pt.userId, 'password_reset', meta);
+    await auditLog(txDb, { companyId: pt.companyId, actorUserId: pt.userId }, {
+      action: 'auth.password_changed', recordType: 'user', recordId: pt.userId, ip: meta.ip ?? undefined,
+    });
+  });
   return c.json(okResponse({ success: true }), 200);
 });
 
@@ -532,16 +587,20 @@ auth.post('/change-password', authMiddleware, async (c) => {
   }
 
   const passwordHash = hashPassword(new_password);
-  await db.update(users)
-    .set({ passwordHash, firstLoginRequired: false })
-    .where(eq(users.id, authCtx.userId));
-
-  // Revoke all refresh tokens (force re-login on other sessions)
-  await db.update(refreshTokens)
-    .set({ revokedAt: new Date() })
-    .where(and(eq(refreshTokens.userId, authCtx.userId), isNull(refreshTokens.revokedAt)));
-
-  await logEvent(db, authCtx.companyId, authCtx.userId, 'password_changed', meta);
+  await db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db;
+    await txDb.update(users)
+      .set({ passwordHash, firstLoginRequired: false })
+      .where(eq(users.id, authCtx.userId));
+    // Revoke all refresh tokens (force re-login on other sessions)
+    await txDb.update(refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(refreshTokens.userId, authCtx.userId), isNull(refreshTokens.revokedAt)));
+    await logEvent(txDb, authCtx.companyId, authCtx.userId, 'password_changed', meta);
+    await auditLog(txDb, { companyId: authCtx.companyId, actorUserId: authCtx.userId }, {
+      action: 'auth.password_changed', recordType: 'user', recordId: authCtx.userId, ip: meta.ip ?? undefined,
+    });
+  });
   return c.json(okResponse({ success: true }), 200);
 });
 
