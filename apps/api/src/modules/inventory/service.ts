@@ -12,6 +12,7 @@ import type { Db } from '../../lib/db'
 import type { AccessFilter } from '../rbac/middleware'
 import type { ResolvedAccess } from '../rbac/resolve'
 import { assertOutletInScope, visibleOutletIdsForPermission } from '../../lib/scope'
+import { auditLog } from '../../lib/audit'
 
 export type ErrorDetail = { field: string; issue: string }
 
@@ -381,6 +382,13 @@ export async function createStockIn(db: Db, ctx: InventoryServiceContext, input:
       .returning()
 
     const balance = await upsertIncreasedBalance(txDb, ctx, { itemId: input.itemId, outletId: input.outletId, qtyBase })
+    await auditLog(txDb, ctx, {
+      action: 'inventory.stock_in',
+      recordType: 'stock_movement',
+      recordId: movement.id,
+      outletId: input.outletId,
+      meta: { item_id: input.itemId, qty_base: movement.qtyBase },
+    })
     return inventoryResult(movement, balance)
   })
 }
@@ -418,6 +426,13 @@ async function createNegativeMovement(
       })
       .returning()
 
+    await auditLog(txDb, ctx, {
+      action: `inventory.${movementType}` as string,
+      recordType: 'stock_movement',
+      recordId: movement.id,
+      outletId: input.outletId,
+      meta: { item_id: input.itemId, qty_base: movement.qtyBase },
+    })
     return inventoryResult(movement, balance)
   })
 }
@@ -498,6 +513,13 @@ export async function createOpname(db: Db, ctx: InventoryServiceContext, input: 
       reason: input.reason ?? null,
     })
 
+    await auditLog(txDb, ctx, {
+      action: 'inventory.opname',
+      recordType: 'stock_movement',
+      recordId: movement.id,
+      outletId: input.outletId,
+      meta: { item_id: input.itemId, qty_base: movement.qtyBase },
+    })
     return inventoryResult(movement, balance)
   })
 }

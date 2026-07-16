@@ -13,6 +13,7 @@ import {
   visibleOutletIdsForPermission,
   type InventoryServiceContext,
 } from './service'
+import { auditLog } from '../../lib/audit'
 
 export type PendingMovementType = 'opname' | 'waste'
 
@@ -155,6 +156,13 @@ export async function submitApproval(db: Db, ctx: InventoryServiceContext, input
       })
       .returning()
 
+    await auditLog(txDb, ctx, {
+      action: 'inventory.approval_submit',
+      recordType: 'pending_stock_movement',
+      recordId: pending.id,
+      outletId: input.outletId,
+      meta: { movement_type: input.movementType, item_id: input.itemId, qty_base: pending.qtyBase },
+    })
     return { pending: pendingDto(pending) }
   })
 }
@@ -186,6 +194,13 @@ export async function validateApproval(db: Db, ctx: InventoryServiceContext, id:
       .returning()
 
     if (!updated) throw conflict('Status bukan pending')
+    await auditLog(txDb, ctx, {
+      action: 'inventory.approval_validate',
+      recordType: 'pending_stock_movement',
+      recordId: id,
+      outletId: row.outletId,
+      meta: { movement_type: row.movementType, item_id: row.itemId },
+    })
     return { pending: pendingDto(updated) }
   })
 }
@@ -255,6 +270,13 @@ export async function finalizeApproval(db: Db, ctx: InventoryServiceContext, id:
 
     if (!updated) throw conflict('Status bukan validated')
 
+    await auditLog(txDb, ctx, {
+      action: 'inventory.approval_finalize',
+      recordType: 'pending_stock_movement',
+      recordId: id,
+      outletId: row.outletId,
+      meta: { movement_type: row.movementType, item_id: row.itemId, movement_id: movement.id },
+    })
     return {
       pending: pendingDto(updated),
       movement: movementDto(movement),
@@ -378,6 +400,13 @@ export async function rejectApproval(
       .returning()
 
     if (!updated) throw conflict('Status tidak bisa direject')
+    await auditLog(txDb, ctx, {
+      action: 'inventory.approval_reject',
+      recordType: 'pending_stock_movement',
+      recordId: id,
+      outletId: row.outletId,
+      meta: { movement_type: row.movementType, item_id: row.itemId, reason },
+    })
     return { pending: pendingDto(updated) }
   })
 }

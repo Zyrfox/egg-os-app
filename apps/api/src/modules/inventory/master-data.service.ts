@@ -14,6 +14,7 @@ import {
   normalizeDecimal,
   type InventoryServiceContext,
 } from './service'
+import { auditLog } from '../../lib/audit'
 
 type ItemRow = typeof items.$inferSelect
 type UnitRow = typeof units.$inferSelect
@@ -207,16 +208,24 @@ export async function createUnit(db: Db, ctx: InventoryServiceContext, input: Cr
   await assertNoUnitCode(db, ctx.companyId, input.code)
 
   try {
-    const [unit] = await db
-      .insert(units)
-      .values({
-        companyId: ctx.companyId,
-        code: input.code,
-        name: input.name,
+    return await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db
+      const [unit] = await txDb
+        .insert(units)
+        .values({
+          companyId: ctx.companyId,
+          code: input.code,
+          name: input.name,
+        })
+        .returning()
+      await auditLog(txDb, ctx, {
+        action: 'inventory.unit_create',
+        recordType: 'unit',
+        recordId: unit.id,
+        meta: { code: unit.code, name: unit.name },
       })
-      .returning()
-
-    return unitDto(unit)
+      return unitDto(unit)
+    })
   } catch (error) {
     if (isUniqueViolation(error)) throw duplicate('Kode unit sudah digunakan')
     throw error
@@ -252,16 +261,24 @@ export async function createCategory(db: Db, ctx: InventoryServiceContext, input
   await assertNoCategoryCode(db, ctx.companyId, input.code)
 
   try {
-    const [category] = await db
-      .insert(itemCategories)
-      .values({
-        companyId: ctx.companyId,
-        code: input.code,
-        name: input.name,
+    return await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db
+      const [category] = await txDb
+        .insert(itemCategories)
+        .values({
+          companyId: ctx.companyId,
+          code: input.code,
+          name: input.name,
+        })
+        .returning()
+      await auditLog(txDb, ctx, {
+        action: 'inventory.category_create',
+        recordType: 'item_category',
+        recordId: category.id,
+        meta: { code: category.code, name: category.name },
       })
-      .returning()
-
-    return categoryDto(category)
+      return categoryDto(category)
+    })
   } catch (error) {
     if (isUniqueViolation(error)) throw duplicate('Kode kategori sudah digunakan')
     throw error
@@ -301,20 +318,28 @@ export async function createItem(db: Db, ctx: InventoryServiceContext, input: Cr
   ])
 
   try {
-    const [item] = await db
-      .insert(items)
-      .values({
-        companyId: ctx.companyId,
-        sku: input.sku,
-        name: input.name,
-        categoryId: input.categoryId ?? null,
-        baseUnitId: input.baseUnitId,
-        pawoonRef: input.pawoonRef ?? null,
-        minStock: input.minStock ?? null,
+    return await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db
+      const [item] = await txDb
+        .insert(items)
+        .values({
+          companyId: ctx.companyId,
+          sku: input.sku,
+          name: input.name,
+          categoryId: input.categoryId ?? null,
+          baseUnitId: input.baseUnitId,
+          pawoonRef: input.pawoonRef ?? null,
+          minStock: input.minStock ?? null,
+        })
+        .returning()
+      await auditLog(txDb, ctx, {
+        action: 'inventory.item_create',
+        recordType: 'item',
+        recordId: item.id,
+        meta: { sku: item.sku, name: item.name },
       })
-      .returning()
-
-    return itemDto(item)
+      return itemDto(item)
+    })
   } catch (error) {
     if (isUniqueViolation(error)) throw duplicate('SKU sudah digunakan')
     throw error
@@ -375,20 +400,34 @@ export async function updateItem(db: Db, ctx: InventoryServiceContext, itemId: s
   await getItemRow(db, ctx.companyId, itemId)
   if (input.categoryId) await getCategoryRow(db, ctx.companyId, input.categoryId)
 
-  const [item] = await db
-    .update(items)
-    .set({
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
-      ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
-      ...(input.minStock !== undefined ? { minStock: input.minStock } : {}),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(items.id, itemId), eq(items.companyId, ctx.companyId), isNull(items.deletedAt)))
-    .returning()
+  const changedFields: string[] = []
+  if (input.name !== undefined) changedFields.push('name')
+  if (input.categoryId !== undefined) changedFields.push('category_id')
+  if (input.isActive !== undefined) changedFields.push('is_active')
+  if (input.minStock !== undefined) changedFields.push('min_stock')
 
-  if (!item) throw outOfScope()
-  return itemDto(item)
+  return db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db
+    const [item] = await txDb
+      .update(items)
+      .set({
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        ...(input.minStock !== undefined ? { minStock: input.minStock } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(items.id, itemId), eq(items.companyId, ctx.companyId), isNull(items.deletedAt)))
+      .returning()
+    if (!item) throw outOfScope()
+    await auditLog(txDb, ctx, {
+      action: 'inventory.item_update',
+      recordType: 'item',
+      recordId: itemId,
+      meta: { changed_fields: changedFields },
+    })
+    return itemDto(item)
+  })
 }
 
 export async function addItemUnitConversion(

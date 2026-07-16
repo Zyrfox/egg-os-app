@@ -7,6 +7,7 @@ import {
   visibleOutletIdsForPermission,
   type ScopeContext,
 } from '../../lib/scope'
+import { auditLog } from '../../lib/audit'
 
 export type ReportServiceContext = ScopeContext
 
@@ -238,6 +239,13 @@ export async function createDraft(db: Db, ctx: ReportServiceContext, input: Crea
         .returning()
     }
 
+    await auditLog(txDb, ctx, {
+      action: 'report.draft_create',
+      recordType: 'daily_report',
+      recordId: report.id,
+      outletId: input.outletId,
+      meta: { report_type: input.reportType, report_date: input.reportDate },
+    })
     return {
       report: reportDto(report),
       answers: answers.map(answerDto),
@@ -378,6 +386,13 @@ export async function submitReport(db: Db, ctx: ReportServiceContext, id: string
       .returning()
 
     if (!updated) throw conflict('Hanya report status draft atau rejected yang bisa di-submit')
+    await auditLog(txDb, ctx, {
+      action: 'report.submit',
+      recordType: 'daily_report',
+      recordId: id,
+      outletId: row.outletId,
+      meta: { report_type: row.reportType, report_date: row.reportDate },
+    })
     return { report: reportDto(updated) }
   })
 }
@@ -414,6 +429,13 @@ export async function validateReport(db: Db, ctx: ReportServiceContext, id: stri
       .returning()
 
     if (!updated) throw conflict('Report bukan status submitted')
+    await auditLog(txDb, ctx, {
+      action: 'report.validate',
+      recordType: 'daily_report',
+      recordId: id,
+      outletId: row.outletId,
+      meta: { report_type: row.reportType, report_date: row.reportDate },
+    })
     return { report: reportDto(updated) }
   })
 }
@@ -458,6 +480,13 @@ export async function rejectReport(
       .returning()
 
     if (!updated) throw conflict('Report bukan status submitted')
+    await auditLog(txDb, ctx, {
+      action: 'report.reject',
+      recordType: 'daily_report',
+      recordId: id,
+      outletId: row.outletId,
+      meta: { report_type: row.reportType, report_date: row.reportDate, reason },
+    })
     return { report: reportDto(updated) }
   })
 }

@@ -4,6 +4,7 @@ import { dailyReports, evidence } from '@egg-os/db'
 import { ERR } from '../../lib/errors'
 import type { Db } from '../../lib/db'
 import { assertOutletInScope, type ScopeContext } from '../../lib/scope'
+import { auditLog } from '../../lib/audit'
 
 // ── Types + constants ──────────────────────────────────────────────────────
 
@@ -252,21 +253,32 @@ export async function requestUpload(
     expiresIn: EVIDENCE_UPLOAD_EXPIRES_IN,
   })
 
-  const [row] = await db
-    .insert(evidence)
-    .values({
-      companyId: ctx.companyId,
+  const row = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as Db
+    const [r] = await txDb
+      .insert(evidence)
+      .values({
+        companyId: ctx.companyId,
+        outletId: record.outletId,
+        recordType: input.recordType,
+        recordId: input.recordId,
+        storageKey: key,
+        fileName: input.fileName,
+        contentType: input.contentType,
+        fileSize: input.fileSize, // KLAIM client; source of truth di-set saat confirmUpload dari HEAD
+        status: 'pending',
+        uploadedBy: ctx.actorUserId,
+      })
+      .returning()
+    await auditLog(txDb, ctx, {
+      action: 'evidence.request_upload',
+      recordType: 'evidence',
+      recordId: r.id,
       outletId: record.outletId,
-      recordType: input.recordType,
-      recordId: input.recordId,
-      storageKey: key,
-      fileName: input.fileName,
-      contentType: input.contentType,
-      fileSize: input.fileSize, // KLAIM client; source of truth di-set saat confirmUpload dari HEAD
-      status: 'pending',
-      uploadedBy: ctx.actorUserId,
+      meta: { record_type: input.recordType, record_id: input.recordId, file_name: input.fileName },
     })
-    .returning()
+    return r
+  })
 
   return {
     evidence: evidenceDto(row),
@@ -321,6 +333,13 @@ export async function confirmUpload(
       )
       .returning()
     if (!updated) throw conflict('Status bukan pending')
+    await auditLog(txDb, ctx, {
+      action: 'evidence.confirm',
+      recordType: 'evidence',
+      recordId: id,
+      outletId: record.outletId,
+      meta: { record_type: row.recordType, record_id: row.recordId, file_size: head.size },
+    })
     return { evidence: evidenceDto(updated) }
   })
 }
@@ -349,6 +368,13 @@ export async function deleteEvidence(
       .update(evidence)
       .set({ deletedAt: new Date() })
       .where(eq(evidence.id, id))
+    await auditLog(txDb, ctx, {
+      action: 'evidence.delete',
+      recordType: 'evidence',
+      recordId: id,
+      outletId: record.outletId,
+      meta: { record_type: row.recordType, record_id: row.recordId, storage_key: row.storageKey },
+    })
     return row.storageKey
   })
 

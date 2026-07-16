@@ -13,6 +13,7 @@ import {
   type ErrorDetail,
   type InventoryServiceContext,
 } from './service'
+import { auditLog } from '../../lib/audit'
 
 export type TransferInput = {
   itemId: string
@@ -223,6 +224,13 @@ export async function createTransfer(db: Db, ctx: InventoryServiceContext, input
       })
       .returning()
 
+    await auditLog(txDb, ctx, {
+      action: 'inventory.transfer_create',
+      recordType: 'stock_transfer',
+      recordId: transfer.id,
+      outletId: input.fromOutletId,
+      meta: { item_id: input.itemId, from_outlet_id: input.fromOutletId, to_outlet_id: input.toOutletId, qty_base: qtyBase },
+    })
     return {
       transfer: transferDto(transfer),
       movements: [movementDto(fromMovement), movementDto(inTransitMovement)],
@@ -303,6 +311,13 @@ export async function receiveTransfer(db: Db, ctx: InventoryServiceContext, tran
       ])
       .returning()
 
+    await auditLog(txDb, ctx, {
+      action: 'inventory.transfer_receive',
+      recordType: 'stock_transfer',
+      recordId: transferId,
+      outletId: transfer.toOutletId,
+      meta: { item_id: transfer.itemId, from_outlet_id: transferBefore.fromOutletId, to_outlet_id: transfer.toOutletId },
+    })
     return {
       transfer: transferDto(transfer),
       movements: [movementDto(inTransitMovement), movementDto(toMovement)],
