@@ -61,8 +61,13 @@ export const auditLogs = pgTable('audit_logs', {
   createdIdx: index('audit_logs_created_idx').on(t.createdAt),
 }));
 // APPEND-ONLY: tidak ada updated_at/deleted_at. Tidak ada CHECK record_type (daftar tumbuh per modul — beda dari evidence yang gated).
-// [L2 — FK behavior, migration 0011] company_id ON DELETE CASCADE; actor_user_id ON DELETE SET NULL; outlet_id ON DELETE SET NULL.
-// Prod tidak pernah hard-delete user (archive = soft-delete); behavior SET NULL efektif hanya di test cleanup. Revisit jika UU PDP erasure diimplementasi.
+// [L2 — FK, migration 0011] company_id ON DELETE CASCADE; outlet_id ON DELETE SET NULL.
+// [L3 — NO-FK, migration 0012, OWNER RATIFIED] actor_user_id TANPA FK ke users.
+//   Alasan: FK + in-transaction → actor row tidak ada (mis. test cleanup) = audit INSERT
+//   throw FK violation → rollback SELURUH aksi bisnis (no action at all, bukan no-trace).
+//   actor_user_id bersumber JWT terverifikasi — trust sudah ada di layer auth sebelumnya.
+//   NO-FK = store apa adanya; SET NULL tidak cukup (actor NULL = audit buta).
+// Prod tidak pernah hard-delete user (archive = soft-delete). Revisit jika UU PDP erasure diimplementasi.
 ```
 
 ---
@@ -113,7 +118,7 @@ Tenant: company dari ctx. `audit.read` → AUDITOR, ERP_OWNER, SUPER_ADMIN (DIRE
 
 ```
 A1 aksi ter-wire menghasilkan TEPAT 1 baris audit dengan action/actor/record benar (sample per modul)
-A2 IN-TRANSACTION: audit insert dipaksa gagal (mis. constraint) → aksi bisnis ROLLBACK (state tidak berubah) — bukti no-action-without-trace
+A2 IN-TRANSACTION: audit insert dipaksa gagal → aksi bisnis ROLLBACK — bukti no-action-without-trace. Rantai bukti: (L1) helper-throw unit test; (L3) zero-swallow grep (tidak ada try/catch di sekitar auditLog); (L3) co-rollback engine-proven via PostgreSQL BEFORE INSERT trigger scoped company b2000000-... pada createStockIn — trigger fires setelah INSERT stock_movements + upsertIncreasedBalance, exception → full txn rollback (stock_movements=0, balance unchanged, audit_logs=0).
 A3 login_failed ter-log dengan actorUserId null + ip + meta.email
 A4 report.update (draft edit) TIDAK menghasilkan audit (noise-gate)
 A5 GET /audit-logs: filter action + date range + record jalan; paginated; DESC
@@ -138,9 +143,11 @@ L4: endpoint GET /audit-logs + Zod + test HTTP (A5/A6) → 4B TUTUP. STOP audit.
 2. Schema: satu tabel polymorphic tipis, meta JSONB. (default)
 3. **IN-TRANSACTION** — audit gagal = aksi rollback. (keputusan eksplisit Owner)
 4. Akses: audit.read → AUDITOR/ERP_OWNER/SUPER_ADMIN; DIREKSI tidak. (default)
+5. **NO-FK actor_user_id (migration 0012, OWNER RATIFIED):** actor_user_id tidak ber-FK ke users. Alasan: FK + in-transaction dapat memblokir aksi bisnis jika actor row tidak ada saat audit INSERT. Actor bersumber JWT terverifikasi — trust layer auth sudah menjamin keberadaan sesi; ledger cukup store nilai apa adanya.
 
 ## 9. Utang tercatat
 - Retensi/partitioning audit_logs → scaling phase.
 - Audit dashboard widget → setelah 4B (kecil).
 - EXP-003 export logging → 4C.
 - Outlet-scoped audit read → kalau Owner butuh nanti.
+- **[L3] Test fixture isolasi cross-file:** race condition transfer.service.test↔dashboard.service.test ditemukan ketika DDL trigger A2 menggeser Vitest worker timing. Pola bahaya: dua test file berbagi UUID prefix dengan entity types berbeda (company≠brand, item≠item). Namespace final: 97*=dashboard, 98*=approval, fc*=transfer, af*/b2*=wiring. Chore: audit semua namespace sebelum L5/frontend tambah test file baru.

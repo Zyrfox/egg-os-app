@@ -42,6 +42,14 @@ const CATEGORY_ID = 'af000000-0000-4000-8000-000000000031'
 const ITEM_ID = 'af000000-0000-4000-8000-000000000040'
 const REPORT_ID = 'af000000-0000-4000-8000-000000000050'
 
+// A2 test: fresh company isolated from af000000-... and 97000000-... to avoid cross-test contamination
+const B2_COMPANY_ID = 'b2000000-0000-4000-8000-000000000001'
+const B2_BRAND_ID   = 'b2000000-0000-4000-8000-000000000002'
+const B2_OUTLET_ID  = 'b2000000-0000-4000-8000-000000000003'
+const B2_ACTOR_ID   = 'b2000000-0000-4000-8000-000000000010'
+const B2_UNIT_ID    = 'b2000000-0000-4000-8000-000000000030'
+const B2_ITEM_ID    = 'b2000000-0000-4000-8000-000000000040'
+
 const sql = postgres(process.env.DATABASE_URL!)
 const db = drizzle(sql, { schema }) as unknown as Db
 
@@ -87,6 +95,20 @@ async function cleanupAll() {
   await sql`DELETE FROM outlets WHERE company_id = ${COMPANY_ID}`
   await sql`DELETE FROM brands WHERE company_id = ${COMPANY_ID}`
   await sql`DELETE FROM companies WHERE id = ${COMPANY_ID}`
+}
+
+async function cleanupB2() {
+  await sql`DROP TRIGGER IF EXISTS trg_a2_stock_in_b2 ON audit_logs`
+  await sql`DROP FUNCTION IF EXISTS raise_on_stock_in_audit_b2()`
+  await sql`DELETE FROM stock_movements WHERE company_id = ${B2_COMPANY_ID}`
+  await sql`DELETE FROM stock_balances WHERE company_id = ${B2_COMPANY_ID}`
+  await sql`DELETE FROM audit_logs WHERE company_id = ${B2_COMPANY_ID}`
+  await sql`DELETE FROM items WHERE company_id = ${B2_COMPANY_ID}`
+  await sql`DELETE FROM units WHERE company_id = ${B2_COMPANY_ID}`
+  await sql`DELETE FROM users WHERE company_id = ${B2_COMPANY_ID}`
+  await sql`DELETE FROM outlets WHERE company_id = ${B2_COMPANY_ID}`
+  await sql`DELETE FROM brands WHERE company_id = ${B2_COMPANY_ID}`
+  await sql`DELETE FROM companies WHERE id = ${B2_COMPANY_ID}`
 }
 
 beforeAll(async () => {
@@ -158,6 +180,7 @@ afterEach(async () => {
 
 afterAll(async () => {
   await cleanupAll()
+  await cleanupB2()
   await sql.end()
 })
 
@@ -325,5 +348,103 @@ describe('AUDIT 4B L3 — wiring smoke tests', () => {
     const meta = rows[0].meta as Record<string, unknown>
     expect(meta?.file_name).toBe('test.jpg')
     expect(meta?.record_type).toBe('daily_report')
+  })
+
+  it('A2 co-rollback: auditLog INSERT (trigger) membuktikan business mutations rollback bersama audit', async () => {
+    // Non-vacuous proof via DDL trigger on fresh isolated company (B2).
+    // Execution order in createStockIn (one txn):
+    //   [1] INSERT stock_movements  [2] upsertIncreasedBalance  [3] auditLog INSERT
+    // A BEFORE INSERT trigger on audit_logs fires at step [3] and raises an exception.
+    // The entire txn rolls back, proving: (a) auditLog WAS called (trigger fired = non-vacuous),
+    // (b) both business mutations [1] and [2] also rolled back (in-txn atomicity).
+
+    await cleanupB2() // clean slate in case of a previous failed run
+
+    await sql`
+      INSERT INTO companies (id, company_code, company_name, status)
+      VALUES (${B2_COMPANY_ID}, 'B2TST', 'B2 Test Co', 'active')
+    `
+    await sql`
+      INSERT INTO brands (id, company_id, brand_code, brand_name, status)
+      VALUES (${B2_BRAND_ID}, ${B2_COMPANY_ID}, 'B2BR', 'B2 Brand', 'active')
+    `
+    await sql`
+      INSERT INTO outlets (id, company_id, brand_id, outlet_code, outlet_name, status, outlet_type)
+      VALUES (${B2_OUTLET_ID}, ${B2_COMPANY_ID}, ${B2_BRAND_ID}, 'B2OUT', 'B2 Outlet', 'active', 'operational')
+    `
+    await sql`
+      INSERT INTO users (id, company_id, email, full_name, status, first_login_required)
+      VALUES (${B2_ACTOR_ID}, ${B2_COMPANY_ID}, 'b2actor@b2.test', 'B2 Actor', 'active', false)
+    `
+    await sql`
+      INSERT INTO units (id, company_id, code, name)
+      VALUES (${B2_UNIT_ID}, ${B2_COMPANY_ID}, 'B2PCS', 'B2 Pieces')
+    `
+    await sql`
+      INSERT INTO items (id, company_id, sku, name, base_unit_id)
+      VALUES (${B2_ITEM_ID}, ${B2_COMPANY_ID}, 'B2-SKU-001', 'B2 Item', ${B2_UNIT_ID})
+    `
+
+    try {
+      // Trigger function: fires BEFORE INSERT on audit_logs, raises only for B2 stock_in.
+      // Dollar-quote delimiter $b2f$ avoids collision with postgres.js parameter syntax.
+      await sql`
+        CREATE OR REPLACE FUNCTION raise_on_stock_in_audit_b2()
+        RETURNS TRIGGER AS $b2f$
+        BEGIN
+          IF NEW.action = 'inventory.stock_in'
+             AND NEW.company_id = 'b2000000-0000-4000-8000-000000000001'::uuid THEN
+            RAISE EXCEPTION 'A2_TRIGGER_FIRED intentional rollback';
+          END IF;
+          RETURN NEW;
+        END;
+        $b2f$ LANGUAGE plpgsql
+      `
+      await sql`
+        CREATE TRIGGER trg_a2_stock_in_b2
+        BEFORE INSERT ON audit_logs
+        FOR EACH ROW EXECUTE FUNCTION raise_on_stock_in_audit_b2()
+      `
+
+      const b2Ctx: InventoryServiceContext = {
+        companyId: B2_COMPANY_ID,
+        actorUserId: B2_ACTOR_ID,
+        accessFilter: {
+          permission: 'inventory.stock_in',
+          ownOnly: false,
+          assignedOnly: false,
+          rowLevelScopes: [],
+          structuralScopes: [{ scopeType: 'outlet', scopeId: B2_OUTLET_ID }],
+        },
+      }
+
+      // createStockIn: mutations fire → auditLog insert → trigger raises → entire txn rolls back
+      await expect(
+        createStockIn(db, b2Ctx, { itemId: B2_ITEM_ID, outletId: B2_OUTLET_ID, qty: '5', unitId: B2_UNIT_ID })
+      ).rejects.toThrow()
+
+      // Assert total rollback across all three steps in the txn:
+
+      const [{ cnt: movCount }] = await sql<{ cnt: number }[]>`
+        SELECT count(*)::int cnt FROM stock_movements WHERE company_id = ${B2_COMPANY_ID}
+      `
+      expect(movCount).toBe(0) // step [1] INSERT stock_movements rolled back
+
+      const balanceRows = await sql<{ qty: string }[]>`
+        SELECT qty_base::text qty FROM stock_balances
+        WHERE company_id = ${B2_COMPANY_ID} AND item_id = ${B2_ITEM_ID} AND outlet_id = ${B2_OUTLET_ID}
+      `
+      expect(balanceRows).toHaveLength(0) // step [2] upsertIncreasedBalance rolled back
+
+      const [{ cnt: auditCount }] = await sql<{ cnt: number }[]>`
+        SELECT count(*)::int cnt FROM audit_logs WHERE company_id = ${B2_COMPANY_ID}
+      `
+      expect(auditCount).toBe(0) // step [3] audit_logs INSERT rolled back (trigger proved WAS called)
+
+    } finally {
+      await sql`DROP TRIGGER IF EXISTS trg_a2_stock_in_b2 ON audit_logs`
+      await sql`DROP FUNCTION IF EXISTS raise_on_stock_in_audit_b2()`
+      await cleanupB2()
+    }
   })
 })
