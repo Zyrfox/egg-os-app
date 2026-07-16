@@ -8,6 +8,6 @@ export default defineConfig({
   schema: './src/schema',
   out: './migrations',
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    url: process.env.DATABASE_URL ?? 'postgresql://egg:egg@localhost:54323/egg_os_test',
   },
 })
