@@ -8,6 +8,7 @@ import inventoryRouter from './modules/inventory/routes'
 import reportRouter from './modules/report/routes'
 import evidenceRouter from './modules/evidence/routes'
 import dashboardRouter from './modules/dashboard/routes'
+import auditRouter from './modules/audit/routes'
 import type { Env } from './types'
 
 const app = new Hono<{ Bindings: Env }>()
@@ -30,5 +31,6 @@ app.route('/api/v1/inventory', inventoryRouter)
 app.route('/api/v1/reports', reportRouter)
 app.route('/api/v1/evidence', evidenceRouter)
 app.route('/api/v1/dashboards', dashboardRouter)
+app.route('/api/v1/audit-logs', auditRouter)
 
 export default app
