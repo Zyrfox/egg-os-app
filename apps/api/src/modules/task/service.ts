@@ -1,10 +1,10 @@
-import { and, eq, inArray, isNull, or } from 'drizzle-orm'
-import { outlets, tasks, userRoles } from '@egg-os/db'
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm'
+import { evidence, outlets, tasks, userRoles } from '@egg-os/db'
 import { ERR } from '../../lib/errors'
 import type { Db } from '../../lib/db'
 import type { AccessFilter } from '../rbac/middleware'
 import type { ResolvedAccess } from '../rbac/resolve'
-import { assertOutletInScope } from '../../lib/scope'
+import { assertOutletInScope, visibleOutletIdsForPermission } from '../../lib/scope'
 import { auditLog } from '../../lib/audit'
 
 type ErrorDetail = { field: string; issue: string }
@@ -380,4 +380,133 @@ export async function updateTask(
 
     return updated
   })
+}
+
+// ── Read layer ────────────────────────────────────────────────────────────────
+
+function taskDto(task: Task) {
+  const now = new Date()
+  const terminalStatuses = ['done', 'verified', 'cancelled']
+  return {
+    id: task.id,
+    company_id: task.companyId,
+    outlet_id: task.outletId,
+    title: task.title,
+    description: task.description,
+    assigner_user_id: task.assignerUserId,
+    assignee_user_id: task.assigneeUserId,
+    status: task.status,
+    due_at: task.dueAt?.toISOString() ?? null,
+    overdue: task.dueAt ? (task.dueAt < now && !terminalStatuses.includes(task.status)) : false,
+    done_at: task.doneAt?.toISOString() ?? null,
+    verified_at: task.verifiedAt?.toISOString() ?? null,
+    verified_by: task.verifiedBy,
+    reject_reason: task.rejectReason,
+    created_at: task.createdAt.toISOString(),
+    updated_at: task.updatedAt.toISOString(),
+  }
+}
+
+export type ListTasksServiceQuery = {
+  outletId?: string
+  assigneeUserId?: string
+  status?: string
+  dueFrom?: string
+  dueTo?: string
+  overdue?: boolean
+  page: number
+  pageSize: number
+}
+
+export async function listTasks(db: Db, ctx: TaskServiceContext, query: ListTasksServiceQuery) {
+  const visibleOutletIds = await visibleOutletIdsForPermission(db, ctx, 'task.read')
+
+  const scopeCondition = or(
+    visibleOutletIds.length > 0 ? inArray(tasks.outletId, visibleOutletIds) : sql`false`,
+    eq(tasks.assigneeUserId, ctx.actorUserId),
+  )
+
+  const conditions = [eq(tasks.companyId, ctx.companyId), scopeCondition]
+
+  if (query.outletId) conditions.push(eq(tasks.outletId, query.outletId))
+  if (query.assigneeUserId) conditions.push(eq(tasks.assigneeUserId, query.assigneeUserId))
+  if (query.status) conditions.push(eq(tasks.status, query.status))
+
+  if (query.dueFrom) {
+    conditions.push(gte(tasks.dueAt, new Date(`${query.dueFrom}T00:00:00+07:00`)))
+  }
+  if (query.dueTo) {
+    const to = new Date(new Date(`${query.dueTo}T00:00:00+07:00`).getTime() + 86_400_000)
+    conditions.push(lt(tasks.dueAt, to))
+  }
+
+  if (query.overdue === true) {
+    conditions.push(isNotNull(tasks.dueAt))
+    conditions.push(lt(tasks.dueAt, new Date()))
+    conditions.push(
+      sql`${tasks.status} NOT IN ('done','verified','cancelled')`,
+    )
+  }
+
+  const whereClause = and(...conditions)
+  const offset = (query.page - 1) * query.pageSize
+
+  const [rows, countResult] = await Promise.all([
+    db
+      .select()
+      .from(tasks)
+      .where(whereClause)
+      .orderBy(sql`${tasks.dueAt} ASC NULLS LAST`, desc(tasks.createdAt))
+      .limit(query.pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(tasks)
+      .where(whereClause),
+  ])
+
+  return {
+    data: rows.map(taskDto),
+    meta: { page: query.page, page_size: query.pageSize, total: countResult[0].count },
+  }
+}
+
+export async function getTaskById(db: Db, ctx: TaskServiceContext, taskId: string) {
+  const task = await getTask(db, ctx.companyId, taskId)
+
+  const visibleOutletIds = await visibleOutletIdsForPermission(db, ctx, 'task.read')
+  const isInScope = visibleOutletIds.includes(task.outletId)
+  const isAssignee = task.assigneeUserId === ctx.actorUserId
+  if (!isInScope && !isAssignee) {
+    throw new TaskServiceError(ERR.OUT_OF_SCOPE.http, ERR.OUT_OF_SCOPE.code, ERR.OUT_OF_SCOPE.message)
+  }
+
+  const evidenceRows = await db
+    .select()
+    .from(evidence)
+    .where(
+      and(
+        eq(evidence.companyId, ctx.companyId),
+        eq(evidence.recordType, 'task'),
+        eq(evidence.recordId, task.id),
+        isNull(evidence.deletedAt),
+      ),
+    )
+    .orderBy(evidence.createdAt)
+
+  const evidenceDtos = evidenceRows.map((row) => ({
+    id: row.id,
+    record_type: row.recordType,
+    record_id: row.recordId,
+    file_name: row.fileName,
+    content_type: row.contentType,
+    file_size: row.fileSize,
+    status: row.status,
+    storage_key: row.storageKey,
+    uploaded_by: row.uploadedBy,
+    uploaded_at: row.uploadedAt.toISOString(),
+    confirmed_at: row.confirmedAt?.toISOString() ?? null,
+  }))
+
+  return { ...taskDto(task), evidence: evidenceDtos }
 }
