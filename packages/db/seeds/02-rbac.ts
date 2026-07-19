@@ -78,6 +78,10 @@ export const RBAC_PERMISSION_CATALOG: PermissionSeed[] = [
   { code: 'dashboard.spv', description: 'View SPV dashboard (report today, pending validation, opname, issues)' },
   { code: 'dashboard.inventory', description: 'View inventory dashboard (stock critical, movement today, waste, discrepancy)' },
   { code: 'dashboard.approval_queue', description: 'View approval queue dashboard (stock movements, reports to validate)' },
+  { code: 'task.create',     description: 'Buat, assign, cancel, dan edit task saat open' },
+  { code: 'task.update_own', description: 'Transisi status task milik sendiri (assignee)' },
+  { code: 'task.verify',     description: 'Verify atau reject penyelesaian task' },
+  { code: 'task.read',       description: 'Baca list dan detail task dalam scope' },
 ]
 
 const allPermissionCodes = RBAC_PERMISSION_CATALOG.map((permission) => permission.code)
@@ -114,6 +118,10 @@ export const RBAC_STARTER_ROLES: RoleSeed[] = [
       'report.item_manage',
       'audit.read',
       'export.run',
+      'task.create',
+      'task.update_own',
+      'task.verify',
+      'task.read',
     ],
   },
   {
@@ -151,6 +159,10 @@ export const RBAC_STARTER_ROLES: RoleSeed[] = [
       'dashboard.executive',
       'dashboard.inventory',
       'dashboard.approval_queue',
+      'task.create',
+      'task.update_own',
+      'task.verify',
+      'task.read',
     ],
   },
   {
@@ -172,6 +184,10 @@ export const RBAC_STARTER_ROLES: RoleSeed[] = [
       'core.outlet_read',
       'dashboard.spv',
       'dashboard.approval_queue',
+      'task.create',
+      'task.update_own',
+      'task.verify',
+      'task.read',
     ],
   },
   {
@@ -190,6 +206,8 @@ export const RBAC_STARTER_ROLES: RoleSeed[] = [
       'evidence.read',
       'evidence.upload',
       'approval.request',
+      'task.update_own',
+      'task.read',
     ],
   },
   {
@@ -197,7 +215,7 @@ export const RBAC_STARTER_ROLES: RoleSeed[] = [
     name: 'Freelance',
     description: 'Assigned-scoped freelance access',
     defaultScopeType: 'assigned',
-    permissions: ['reports.submit', 'reports.read', 'approval.request'],
+    permissions: ['reports.submit', 'reports.read', 'approval.request', 'task.update_own', 'task.read'],
   },
   {
     code: 'AUDITOR',
