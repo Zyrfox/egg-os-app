@@ -11,7 +11,7 @@ import { sql } from 'drizzle-orm'
 import { users } from './auth'
 import { companies, outlets } from './core'
 
-const evidenceRecordTypes = sql`('daily_report')`
+const evidenceRecordTypes = sql`('daily_report','task')`
 const evidenceContentTypes = sql`('image/jpeg', 'image/png', 'application/pdf')`
 const evidenceStatuses = sql`('pending', 'confirmed')`
 

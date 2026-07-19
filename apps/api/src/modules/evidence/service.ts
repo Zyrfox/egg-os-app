@@ -1,6 +1,6 @@
 import { AwsClient } from 'aws4fetch'
 import { and, eq, isNull } from 'drizzle-orm'
-import { dailyReports, evidence } from '@egg-os/db'
+import { dailyReports, evidence, tasks } from '@egg-os/db'
 import { ERR } from '../../lib/errors'
 import type { Db } from '../../lib/db'
 import { assertOutletInScope, type ScopeContext } from '../../lib/scope'
@@ -9,7 +9,7 @@ import { auditLog } from '../../lib/audit'
 // ── Types + constants ──────────────────────────────────────────────────────
 
 export type EvidenceServiceContext = ScopeContext
-export type RecordType = 'daily_report'
+export type RecordType = 'daily_report' | 'task'
 export type EvidenceStatus = 'pending' | 'confirmed'
 export type EvidenceContentType = 'image/jpeg' | 'image/png' | 'application/pdf'
 
@@ -159,35 +159,29 @@ async function resolveRecord(
   recordType: RecordType,
   recordId: string,
 ): Promise<ResolvedRecord> {
-  // MVP: hanya daily_report. Modul lain (waste/opname/complaint) TAMBAH branch di sini + CHECK schema.
-  if (recordType !== 'daily_report') {
-    throw validation([{ field: 'record_type', issue: 'record_type belum di-wire' }])
+  if (recordType === 'daily_report') {
+    const row = await db
+      .select({ id: dailyReports.id, companyId: dailyReports.companyId, outletId: dailyReports.outletId, status: dailyReports.status })
+      .from(dailyReports)
+      .where(and(eq(dailyReports.id, recordId), eq(dailyReports.companyId, ctx.companyId), isNull(dailyReports.deletedAt)))
+      .limit(1)
+      .then((rs) => rs[0] ?? null)
+    if (!row) throw outOfScope()
+    return { recordType: 'daily_report', recordId: row.id, companyId: row.companyId, outletId: row.outletId, isImmutable: row.status === 'validated' }
   }
-  const row = await db
-    .select({
-      id: dailyReports.id,
-      companyId: dailyReports.companyId,
-      outletId: dailyReports.outletId,
-      status: dailyReports.status,
-    })
-    .from(dailyReports)
-    .where(
-      and(
-        eq(dailyReports.id, recordId),
-        eq(dailyReports.companyId, ctx.companyId),
-        isNull(dailyReports.deletedAt),
-      ),
-    )
-    .limit(1)
-    .then((rs) => rs[0] ?? null)
-  if (!row) throw outOfScope()
-  return {
-    recordType: 'daily_report',
-    recordId: row.id,
-    companyId: row.companyId,
-    outletId: row.outletId,
-    isImmutable: row.status === 'validated',
+
+  if (recordType === 'task') {
+    const row = await db
+      .select({ id: tasks.id, companyId: tasks.companyId, outletId: tasks.outletId, status: tasks.status })
+      .from(tasks)
+      .where(and(eq(tasks.id, recordId), eq(tasks.companyId, ctx.companyId)))
+      .limit(1)
+      .then((rs) => rs[0] ?? null)
+    if (!row) throw outOfScope()
+    return { recordType: 'task', recordId: row.id, companyId: row.companyId, outletId: row.outletId, isImmutable: row.status === 'verified' }
   }
+
+  throw validation([{ field: 'record_type', issue: 'record_type belum di-wire' }])
 }
 
 async function lockEvidence(db: Db, ctx: EvidenceServiceContext, id: string) {

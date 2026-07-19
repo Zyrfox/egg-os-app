@@ -1,0 +1,2 @@
+ALTER TABLE "evidence" DROP CONSTRAINT "evidence_record_type_check";--> statement-breakpoint
+ALTER TABLE "evidence" ADD CONSTRAINT "evidence_record_type_check" CHECK ("evidence"."record_type" IN ('daily_report','task'));

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 const EvidenceContentType = z.enum(['image/jpeg', 'image/png', 'application/pdf'])
-const RecordType = z.enum(['daily_report'])
+const RecordType = z.enum(['daily_report', 'task'])
 
 export const RequestUploadReq = z
   .object({
@@ -12,7 +12,7 @@ export const RequestUploadReq = z
     file_size: z.number().int().min(1).max(10 * 1024 * 1024),
   })
   .transform((v) => ({
-    recordType: v.record_type as 'daily_report',
+    recordType: v.record_type as 'daily_report' | 'task',
     recordId: v.record_id,
     fileName: v.file_name,
     contentType: v.content_type as 'image/jpeg' | 'image/png' | 'application/pdf',
@@ -29,7 +29,7 @@ export const ListEvidenceQuery = z
     record_id: z.string().uuid(),
   })
   .transform((v) => ({
-    recordType: v.record_type as 'daily_report',
+    recordType: v.record_type as 'daily_report' | 'task',
     recordId: v.record_id,
   }))
 
