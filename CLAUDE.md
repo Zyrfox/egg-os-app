@@ -24,13 +24,10 @@ Workspace prefix: `@egg-os/*` (contoh: `@egg-os/web`, `@egg-os/api`, `@egg-os/db
 
 Semua keputusan teknis mengikuti urutan otoritas ini:
 
-```
-1. docs/EGG_OS_GLOBAL_CONTRACT_v0.2.md   ← aturan global, TIDAK BOLEH dilanggar
-2. docs/EGG_OS_AUTH_SPEC_BUILDABLE_v0.2.md  ← spec auth & RBAC
-3. docs/EGG_OS_DBD_v0.2.md               ← schema database
-4. docs/EGG_OS_API_SPEC_v0.2.md          ← contract API
-5. docs/openapi.yaml                      ← OpenAPI spec
-```
+1. API_CONVENTIONS.md + buildable specs per modul  ← aturan aktual
+2. docs/openapi.yaml (generated from implementation, bukan aspirasional)
+3. EGG_OS_GLOBAL_CONTRACT_v0.2.md (legacy reference — konflik = implementasi menang)
+4. docs/openapi.legacy.yaml (blueprint pre-Sprint 0, referensi saja)
 
 Kalau Module Spec diam → jatuh ke Global Contract.
 Kalau Global Contract & Module Spec bertabrakan → Global Contract menang, flag konflik ke user.

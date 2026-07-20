@@ -420,3 +420,17 @@ Kalau task plan bertentangan dengan Global Contract → task plan yang salah.
 ---
 
 *Layer 1 selesai → lanjut Layer 2: freeze AUTH ke level buildable (pakai semua kontrak di atas sebagai cetakan).*
+
+---
+
+## 12. OVERRIDE REGISTER (keputusan yang menggantikan §1–§11)
+
+Overrides ini diputuskan eksplisit oleh Owner dan menggantikan ketentuan
+Global Contract yang bertentangan. Perubahan berikutnya butuh persetujuan Owner.
+
+| # | Ketentuan Lama | Override | Alasan | Sprint |
+|---|---|---|---|---|
+| 1 | §1: deleted_at wajib semua tabel operasional | tasks tanpa deleted_at | cancelled = terminal, riwayat di audit_logs | 3B |
+| 2 | §3.3: pagination key = limit | page_size | semua 85 endpoint sudah implementasi ini | C2 |
+| 3 | §3.3: meta berisi total_pages | total_pages dihapus | frontend hitung dari total/page_size; breaking change kalau ditambah | C2 |
+| 4 | §11.2: permission format inv.stock_in | inventory.stock_in (nama modul penuh) | 183 role_permissions sudah pakai ini | C2 |

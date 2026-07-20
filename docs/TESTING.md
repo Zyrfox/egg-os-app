@@ -90,3 +90,12 @@ Test Files  9 passed (9)
 Tests       108 passed (108)
 Duration    about 6s
 ```
+
+## Connection Pool — Test Environment
+
+`createDb({ max: 1 })` membuat koneksi baru per-request dan tidak langsung
+release setelah suite selesai. Back-to-back run ke-3+ bisa collapse dengan
+"too many clients". Solusi: jeda antar run atau restart terminal.
+
+Ini test-only behavior — production menggunakan Cloudflare Hyperdrive
+yang manage pool sendiri.
