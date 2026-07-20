@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --brand-dominant: #F4F4F4;
+  --brand-accent-1: #141414;
+  --brand-accent-2: rgba(20, 20, 20, 0.84);
+  --brand-micro: #C0F926;
+  --brand-gradient: linear-gradient(135deg, #141414, rgba(20, 20, 20, 0.84));
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+[data-brand="back-to-mie-kitchen"] {
+  --brand-accent-1: #007BFF;
+  --brand-accent-2: #00ACED;
+  --brand-micro: #FFC300;
+  --brand-gradient: linear-gradient(135deg, #007BFF, #00ACED);
+}
+
+[data-brand="back-to-mie-forest"] {
+  --brand-accent-1: #0A2E4D;
+  --brand-accent-2: rgba(10, 46, 77, 0.84);
+  --brand-micro: #C2613D;
+  --brand-gradient: linear-gradient(135deg, #0A2E4D, rgba(10, 46, 77, 0.84));
+}
+
+[data-brand="taman-sari-forest"] {
+  --brand-accent-1: #0B2745;
+  --brand-accent-2: rgba(11, 39, 69, 0.84);
+  --brand-micro: #2D5F3F;
+  --brand-gradient: linear-gradient(135deg, #0B2745, rgba(11, 39, 69, 0.84));
+}
+
+* {
+  transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease;
+}
+
+.brand-gradient-animated {
+  background: var(--brand-gradient);
+  background-size: 200% 200%;
+  animation: gradientShift 4s ease infinite;
+}
+
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
